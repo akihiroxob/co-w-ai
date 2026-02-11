@@ -1,0 +1,3 @@
+[mcp_servers.orchestrator]
+command = "node"
+args = ["//Users/aokayama/git/co-w-ai/build/index.js"]
