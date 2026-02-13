@@ -4,21 +4,22 @@ import { workers } from "../libs/workers";
 import { execCommandCapture } from "../utils/shellUtil";
 import { worktreePathFor } from "../utils/gitUtil";
 import { state } from "../libs/state";
+import { loadRepoPolicy } from "../utils/policyUtil";
+import { resolveCommandFromPolicy } from "../utils/shellUtil";
 
 export const registerVerifyTaskTool = (server: McpServer) =>
   server.registerTool(
     "verifyTask",
     {
       title: "verifyTask",
-      description:
-        "Run verification command (tests/lint/typecheck) in the task worktree. Returns logs.",
+      description: "Run verification command defined in .agent/policy.yaml in the task worktree.",
       inputSchema: {
         agentId: z.string().min(1),
         taskId: z.string().min(1),
-        command: z.string().min(1), // e.g. "pnpm test"
+        commandKey: z.string().min(1), // e.g. "test"
       },
     },
-    async ({ agentId, taskId, command }) => {
+    async ({ agentId, taskId, commandKey }) => {
       const worker = workers.get(agentId);
       if (!worker) {
         return {
@@ -28,13 +29,45 @@ export const registerVerifyTaskTool = (server: McpServer) =>
         };
       }
 
+      let policy;
+      try {
+        policy = await loadRepoPolicy(worker.repoPath);
+      } catch (e: any) {
+        return {
+          content: [{ type: "text", text: `policy load failed: ${String(e?.message ?? e)}` }],
+          structuredContent: { ok: false, error: "POLICY_LOAD_FAILED" },
+          isError: true,
+        };
+      }
+
+      let resolved;
+      try {
+        resolved = resolveCommandFromPolicy(policy, commandKey);
+      } catch (e: any) {
+        return {
+          content: [{ type: "text", text: `command rejected: ${String(e?.message ?? e)}` }],
+          structuredContent: { ok: false, error: "COMMAND_REJECTED" },
+          isError: true,
+        };
+      }
+
       const cwd = worktreePathFor(worker, agentId, taskId);
-      const res = await execCommandCapture(command, cwd);
+      const res = await execCommandCapture(resolved.command, cwd);
+
       state.lastCommand = res;
 
       return {
-        content: [{ type: "text", text: res.ok ? "verify ok" : "verify failed" }],
-        structuredContent: res,
+        content: [
+          {
+            type: "text",
+            text: res.ok ? `verify ok: ${commandKey}` : `verify failed: ${commandKey}`,
+          },
+        ],
+        structuredContent: {
+          ...res,
+          commandKey,
+          resolvedCommand: resolved.command,
+        },
         isError: !res.ok,
       };
     },

@@ -1,0 +1,17 @@
+project:
+  name: xxx-project
+
+commands:
+  test: "pnpm test"
+  lint: "pnpm lint"
+  typecheck: "pnpm typecheck"
+
+security:
+  # runCommand / verifyTask で許可する “キー”
+  allow:
+    - test
+    - lint
+    - typecheck
+
+  # 直接コマンド文字列を渡すのを禁止したいなら true（推奨）
+  forbid_raw_command: true

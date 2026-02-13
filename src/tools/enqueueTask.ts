@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getIsoTime } from "../utils/timeUtil";
+import { issueTaskId } from "../utils/idUtil";
 import { Task } from "../types/Task";
 import { state } from "../libs/state";
 
@@ -18,7 +19,7 @@ export const registerEnqueueTaskTool = (server: McpServer) =>
     async ({ title, description }) => {
       const ts = getIsoTime();
       const task: Task = {
-        id: getIsoTime(),
+        id: issueTaskId(),
         title,
         description,
         status: "todo",
