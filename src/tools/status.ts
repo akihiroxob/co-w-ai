@@ -7,7 +7,7 @@ export const registerStatusTool = (server: McpServer) =>
     "status",
     {
       title: "status",
-      description: "Get current orchestrator status (summary + tasks + lastCommand).",
+      description: "Get current orchestrator status (summary + tasks + workflows + activity).",
       inputSchema: {},
     },
     async () => {
@@ -22,6 +22,9 @@ export const registerStatusTool = (server: McpServer) =>
       const payload = {
         summary,
         tasks: state.tasks,
+        workflows: state.workflows,
+        agentRoles: state.agentRoles,
+        activityTail: state.activityLog.slice(Math.max(0, state.activityLog.length - 50)),
         lastCommand: state.lastCommand,
       };
 

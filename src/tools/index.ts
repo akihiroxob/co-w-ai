@@ -9,3 +9,6 @@ export { registerRunWorkerTaskTool } from "./runWorkerTask";
 export { registerApplyPatchTool } from "./applyPatch";
 export { registerVerifyTaskTool } from "./verifyTask";
 export { registerCleanupWorktreeTool } from "./cleanupWorktree";
+export { registerLoadAgentRolesTool } from "./loadAgentRoles";
+export { registerRunStoryWorkflowTool } from "./runStoryWorkflow";
+export { registerActivityLogTool } from "./activityLog";

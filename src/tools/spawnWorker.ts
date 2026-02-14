@@ -4,6 +4,10 @@ import { z } from "zod";
 import { ensureDir } from "../utils/fsUtil";
 import { Worker } from "../types/Worker";
 import { workers } from "../libs/workers";
+import { addActivityEvent } from "../libs/state";
+import { getIsoTime } from "../utils/timeUtil";
+import { issueTaskId } from "../utils/idUtil";
+import { applyAgentRoles, loadAgentRolesFromMarkdown } from "../utils/agentRoleUtil";
 
 export const registerSpawnWorkerTool = (server: McpServer) =>
   server.registerTool(
@@ -34,9 +38,34 @@ export const registerSpawnWorkerTool = (server: McpServer) =>
 
       workers.set(agentId, worker);
 
+      let overrideLoaded = 0;
+      let overridePath: string | null = null;
+      try {
+        const loaded = await loadAgentRolesFromMarkdown(worker.repoPath);
+        applyAgentRoles(loaded.roles, false);
+        overrideLoaded = loaded.roles.length;
+        overridePath = loaded.path;
+        addActivityEvent({
+          id: issueTaskId("evt"),
+          timestamp: getIsoTime(),
+          type: "system",
+          action: "load_roles_repo_override",
+          detail: `loaded ${loaded.roles.length} role(s) from ${loaded.path}`,
+          agentId,
+        });
+      } catch {
+        // repo override file is optional
+      }
+
       return {
         content: [{ type: "text", text: `Worker registered: ${agentId}` }],
-        structuredContent: worker,
+        structuredContent: {
+          ...worker,
+          repoRoleOverride: {
+            loaded: overrideLoaded,
+            sourcePath: overridePath,
+          },
+        },
       };
     },
   );
