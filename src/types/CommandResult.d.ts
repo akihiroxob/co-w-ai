@@ -9,4 +9,5 @@ export type CommandResult = {
   startedAt: string;
   finishedAt: string;
   durationMs: number;
+  timedOut?: boolean;
 };

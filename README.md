@@ -26,11 +26,19 @@ pnpm start
 
 Repo override and manual load update matching `agentId` entries.
 
+## Reliability Notes
+- `runWorkerTask` resolves base branch automatically when omitted:
+  - preferred input -> `origin/HEAD` -> `main` -> `master` -> current `HEAD`
+- `runWorkerTask` supports `timeoutMs` and returns timeout state in command result (`timedOut`).
+- Lifecycle events are written to `activityLog` for start, branch/worktree, codex, verify, diff, and failure.
+- `setTaskStatus` blocks `done` when worker provenance/verification requirements are not met.
+- `cleanupWorktree` supports `archiveBeforeForce` and `deleteBranch` options.
+
 ## MCP Tools (workflow)
 - `loadAgentRoles`: load role profiles from markdown (default `<repo>/.agent/roles.md`).
 - `runStoryWorkflow`: story intake, clarification, decomposition, execution, verification, reporting.
 - `activityLog`: inspect what each agent/system did.
-- `status`: global snapshot including workflows and activity tail.
+- `status`: global snapshot including workflows, task run metadata, and activity tail.
 
 ## Recommended Usage Flow
 1. Register workers (`spawnWorker`).

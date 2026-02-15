@@ -2,12 +2,27 @@ import { CommandResult } from "../types/CommandResult";
 import { Task } from "../types/Task";
 import { ActivityEvent, AgentRoleProfile, StoryWorkflow } from "../types/StoryWorkflow";
 
+export type TaskRunMeta = {
+  taskId: string;
+  agentId?: string;
+  worktreePath?: string;
+  branch?: string;
+  baseBranch?: string;
+  diffLength?: number;
+  provenanceOk: boolean;
+  verifyRequired: boolean;
+  verifyCommandKey?: string;
+  verified: boolean;
+  lastRunAt: string;
+};
+
 type AppState = {
   tasks: Task[];
   lastCommand: CommandResult | null;
   agentRoles: Record<string, AgentRoleProfile>;
   workflows: StoryWorkflow[];
   activityLog: ActivityEvent[];
+  taskRunMeta: Record<string, TaskRunMeta>;
 };
 
 export const state: AppState = {
@@ -16,6 +31,7 @@ export const state: AppState = {
   agentRoles: {},
   workflows: [],
   activityLog: [],
+  taskRunMeta: {},
 };
 
 export const findTask = (taskId: string): Task | undefined => {

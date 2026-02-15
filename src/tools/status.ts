@@ -24,6 +24,7 @@ export const registerStatusTool = (server: McpServer) =>
         tasks: state.tasks,
         workflows: state.workflows,
         agentRoles: state.agentRoles,
+        taskRunMeta: state.taskRunMeta,
         activityTail: state.activityLog.slice(Math.max(0, state.activityLog.length - 50)),
         lastCommand: state.lastCommand,
       };

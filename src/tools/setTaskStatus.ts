@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { findTask } from "../libs/state";
+import { findTask, state } from "../libs/state";
 import { getIsoTime } from "../utils/timeUtil";
 
 export const registerSetTaskStatusTool = (server: McpServer) =>
@@ -22,6 +22,27 @@ export const registerSetTaskStatusTool = (server: McpServer) =>
           structuredContent: { ok: false, error: "TASK_NOT_FOUND", taskId },
           isError: true,
         };
+      }
+
+      if (status === "done") {
+        const meta = state.taskRunMeta[taskId];
+        if (meta) {
+          if (!meta.provenanceOk) {
+            return {
+              content: [{ type: "text", text: `Cannot set done: provenance missing for ${taskId}` }],
+              structuredContent: { ok: false, error: "PROVENANCE_REQUIRED", taskId, meta },
+              isError: true,
+            };
+          }
+
+          if (meta.verifyRequired && !meta.verified) {
+            return {
+              content: [{ type: "text", text: `Cannot set done: verify is required for ${taskId}` }],
+              structuredContent: { ok: false, error: "VERIFY_REQUIRED", taskId, meta },
+              isError: true,
+            };
+          }
+        }
       }
 
       task.status = status;
