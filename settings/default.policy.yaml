@@ -1,0 +1,18 @@
+project:
+  name: co-w-ai-default
+
+commands:
+  test: "pnpm test"
+  lint: "pnpm lint"
+  typecheck: "pnpm typecheck"
+  build: "pnpm build"
+  status: "git status --short"
+
+security:
+  allow:
+    - test
+    - lint
+    - typecheck
+    - build
+    - status
+  forbid_raw_command: true

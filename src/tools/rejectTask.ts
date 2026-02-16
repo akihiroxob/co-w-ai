@@ -34,6 +34,9 @@ export const registerRejectTaskTool = (server: McpServer) =>
       }
 
       task.status = "todo";
+      task.reworkRequested = true;
+      task.reworkReason = reason.trim();
+      task.reworkCount = (task.reworkCount ?? 0) + 1;
       task.updatedAt = getIsoTime();
 
       addActivityEvent({

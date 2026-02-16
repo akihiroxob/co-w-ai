@@ -1,8 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { addActivityEvent, findTask } from "../libs/state";
+import { workers } from "../libs/workers";
 import { issueTaskId } from "../utils/idUtil";
 import { getIsoTime } from "../utils/timeUtil";
+import { validateTaskWorktree } from "../utils/gitUtil";
 
 export const registerSubmitTaskTool = (server: McpServer) =>
   server.registerTool(
@@ -48,8 +50,35 @@ export const registerSubmitTaskTool = (server: McpServer) =>
         };
       }
 
+      const worker = workers.get(agentId);
+      if (!worker) {
+        return {
+          content: [{ type: "text", text: `Worker not found: ${agentId}` }],
+          structuredContent: { ok: false, error: "WORKER_NOT_FOUND", agentId },
+          isError: true,
+        };
+      }
+
+      const worktreeCheck = await validateTaskWorktree(worker, agentId, taskId);
+      if (!worktreeCheck.ok) {
+        return {
+          content: [{ type: "text", text: `task worktree is required for submit: ${taskId}` }],
+          structuredContent: {
+            ok: false,
+            error: "WORKTREE_REQUIRED",
+            taskId,
+            agentId,
+            reason: worktreeCheck.error,
+            detail: worktreeCheck.detail,
+          },
+          isError: true,
+        };
+      }
+
       task.assignee = agentId;
       task.status = "wait_accept";
+      task.reworkRequested = false;
+      task.reworkReason = undefined;
       task.updatedAt = getIsoTime();
 
       addActivityEvent({

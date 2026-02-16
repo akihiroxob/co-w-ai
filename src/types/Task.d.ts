@@ -5,6 +5,9 @@ export type Task = {
   description?: string;
   status: TaskStatus;
   assignee?: string; // "A", "B1", "B2", ...
+  reworkRequested?: boolean;
+  reworkReason?: string;
+  reworkCount?: number;
   createdAt: string;
   updatedAt: string;
 };

@@ -35,13 +35,23 @@ Policy resolution order for verification commands:
 - Optional override: `COWAI_WORKERS_FILE`
 - Workers and role profiles are preloaded at startup.
 - `spawnWorker` is for temporary/manual registration when needed.
+- Optional auto-claim loop:
+  - enable: `COWAI_AUTO_CLAIM=true`
+  - interval ms: `COWAI_AUTO_CLAIM_INTERVAL_MS` (default `5000`)
+  - per-agent max doing: `COWAI_AUTO_CLAIM_MAX_DOING_PER_AGENT` (default `1`)
+  - requires worktree creation permission (same requirement as manual `claimTask`)
 
 ## Task Status
 - `todo` -> `doing` -> `wait_accept` -> `done`
 - `blocked` is used when execution/verification fails.
+- `rejectTask` puts task back to `todo` as rework-priority for the same assignee.
 - development handoff:
   - `claimTask` (`todo` -> `doing`)
   - `submitTask` (`doing` -> `wait_accept`)
+- worktree enforcement is built into the same flow:
+  - `claimTask` auto-prepares task worktree/branch for the assignee
+  - `submitTask` is rejected if the expected task worktree is missing or inconsistent
+- once submitted (`wait_accept`), worker can move to other tasks without waiting for PM acceptance.
 - `wait_accept` is reviewed by PM/planning:
   - accept: `acceptTask` (`wait_accept` -> `done`)
   - reject: `rejectTask` (`wait_accept` -> `todo`)
@@ -61,6 +71,12 @@ Policy resolution order for verification commands:
    - `acceptTask` for completion
    - `rejectTask` to send back for rework
 8. Human accepts story outcome; if insufficient, submits follow-up story.
+
+## Worker Quick Steps
+1. Worker claims a `todo` task with `claimTask` and starts implementation.
+2. Worker implements changes in the assigned task scope and validates locally as needed.
+3. Worker sends the handoff with `submitTask` (`doing` -> `wait_accept`).
+4. PM reviews and finalizes with `acceptTask` (`wait_accept` -> `done`).
 
 ## Multi-Terminal Monitoring
 - Terminal A: submit stories/tasks (`runStoryWorkflow`).

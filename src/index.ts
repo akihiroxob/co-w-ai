@@ -4,6 +4,7 @@ import { addActivityEvent } from "./libs/state";
 import { issueTaskId } from "./utils/idUtil";
 import { getIsoTime } from "./utils/timeUtil";
 import { preloadWorkersFromConfig } from "./utils/workerBootstrap";
+import { startAutoClaimLoop } from "./utils/autoClaimLoop";
 
 // -------------------------
 // Server
@@ -61,6 +62,12 @@ async function preloadWorkers() {
 async function main() {
   console.error("MCP Orchestrator starting (stdio) ...");
   await preloadWorkers();
+  const autoClaim = startAutoClaimLoop();
+  if (autoClaim.enabled) {
+    console.error(
+      `Auto-claim loop enabled: interval=${autoClaim.intervalMs}ms, maxDoingPerAgent=${autoClaim.maxDoingPerAgent}`,
+    );
+  }
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("MCP Orchestrator cowai has connected");
