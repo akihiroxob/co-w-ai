@@ -1,9 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { addActivityEvent, state } from "../libs/state";
-import { getIsoTime } from "../utils/timeUtil";
-import { issueTaskId } from "../utils/idUtil";
-import { Task } from "../types/Task";
+import { addActivityEvent, state } from "../../libs/state";
+import { getIsoTime } from "../../utils/timeUtil";
+import { issueTaskId } from "../../utils/idUtil";
+import { Task } from "../../types/Task";
 
 export const registerEnqueueTaskTool = (server: McpServer) =>
   server.registerTool(

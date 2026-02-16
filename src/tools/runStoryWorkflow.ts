@@ -7,6 +7,11 @@ import { buildClarifyingQuestions, buildWorkflowTasks } from "../utils/workflowU
 import { StoryWorkflow, WorkflowTask } from "../types/StoryWorkflow";
 import { Task } from "../types/Task";
 
+const parseBool = (v: string | undefined) => {
+  if (!v) return false;
+  return ["1", "true", "yes", "on"].includes(v.toLowerCase());
+};
+
 const applyAnswers = (
   workflow: StoryWorkflow,
   answers: { questionId: string; answer: string }[],
@@ -62,18 +67,23 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
       },
     },
     async ({ workflowId, story, answers, autoExecute, autoVerify, baseBranch, planningAutoAccept }) => {
-      if (autoExecute || planningAutoAccept || autoVerify || baseBranch) {
+      const wantsExecutionOptions = Boolean(
+        autoExecute || planningAutoAccept || autoVerify || baseBranch,
+      );
+      const executionEnabled = parseBool(process.env.COWAI_ENABLE_WORKFLOW_EXECUTION);
+      if (wantsExecutionOptions && !executionEnabled) {
         return {
           content: [
             {
               type: "text",
-              text: "Execution options are disabled. Use claimTask/submitTask and PM review tools.",
+              text: "Execution options are disabled. Set COWAI_ENABLE_WORKFLOW_EXECUTION=true to enable them.",
             },
           ],
           structuredContent: {
             ok: false,
             error: "WORKFLOW_EXECUTION_DISABLED",
-            hint: "runStoryWorkflow is planning-only. Use claimTask -> submitTask -> acceptTask/rejectTask.",
+            hint:
+              "runStoryWorkflow is planning-only unless COWAI_ENABLE_WORKFLOW_EXECUTION=true. Use claimTask -> submitTask -> acceptTask/rejectTask.",
           },
           isError: true,
         };

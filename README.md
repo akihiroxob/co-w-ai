@@ -58,7 +58,18 @@ Policy resolution order for verification commands:
 
 ## PM Gateway
 - Route all requests through `runStoryWorkflow` (PM/planning gateway).
+- By default, execution flags (`autoExecute`, `autoVerify`, `planningAutoAccept`, `baseBranch`) are disabled.
+- To enable execution flags, set `COWAI_ENABLE_WORKFLOW_EXECUTION=true` in the MCP server environment.
 - Use `activityLog` for execution monitoring.
+
+## Environment Variables
+| Name | Purpose | Default | Notes |
+| --- | --- | --- | --- |
+| `COWAI_WORKERS_FILE` | Override workers config path | `<cwd>/settings/workers.yaml`, then repo fallback | Relative path is resolved from current working directory. |
+| `COWAI_AUTO_CLAIM` | Enable automatic `todo` -> `doing` claiming loop | `false` | Truthy values: `1`, `true`, `yes`, `on`. |
+| `COWAI_AUTO_CLAIM_INTERVAL_MS` | Auto-claim loop interval (ms) | `5000` | Invalid values fall back to default. |
+| `COWAI_AUTO_CLAIM_MAX_DOING_PER_AGENT` | Max concurrent `doing` tasks per agent in auto-claim loop | `1` | Invalid values fall back to default. |
+| `COWAI_ENABLE_WORKFLOW_EXECUTION` | Enable execution flags in `runStoryWorkflow` (`autoExecute`, `autoVerify`, `planningAutoAccept`, `baseBranch`) | `false` | When disabled, `runStoryWorkflow` is planning-only. |
 
 ## Planning Bridge Flow
 1. Human sends story via Codex.
