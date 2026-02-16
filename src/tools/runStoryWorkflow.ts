@@ -1,16 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { workers } from "../libs/workers";
 import { addActivityEvent, findWorkflow, state } from "../libs/state";
 import { issueTaskId } from "../utils/idUtil";
 import { getIsoTime } from "../utils/timeUtil";
 import { buildClarifyingQuestions, buildWorkflowTasks } from "../utils/workflowUtil";
 import { StoryWorkflow, WorkflowTask } from "../types/StoryWorkflow";
 import { Task } from "../types/Task";
-import { ensureDir } from "../utils/fsUtil";
-import { safeBranchName, worktreePathFor } from "../utils/gitUtil";
-import { execCommandCapture, resolveCommandFromPolicy } from "../utils/shellUtil";
-import { loadRepoPolicy } from "../utils/policyUtil";
 
 const applyAnswers = (
   workflow: StoryWorkflow,
@@ -42,142 +37,13 @@ const toStateTask = (wfId: string, wt: WorkflowTask): Task => {
   };
 };
 
-const runSubTask = async (
-  workflowId: string,
-  task: WorkflowTask,
-  story: string,
-  baseBranch: string,
-  autoVerify: boolean,
-) => {
-  const now = getIsoTime();
-  task.status = "doing";
-
-  addActivityEvent({
-    id: issueTaskId("evt"),
-    timestamp: now,
-    type: "agent",
-    action: "subtask_start",
-    detail: `${task.title}: ${task.description}`,
-    workflowId,
-    agentId: task.assignee,
-  });
-
-  if (!task.assignee) {
-    task.status = "blocked";
-    task.notes = "Assignee is missing";
-    return;
-  }
-
-  const worker = workers.get(task.assignee);
-  if (!worker) {
-    task.status = "blocked";
-    task.notes = `Worker not found: ${task.assignee}`;
-    return;
-  }
-
-  const branch = `agent/${task.assignee}/${safeBranchName(task.taskId)}`;
-  const wtPath = worktreePathFor(worker, task.assignee, task.taskId);
-
-  const revParse = await execCommandCapture("git rev-parse --is-inside-work-tree", worker.repoPath);
-  if (!revParse.ok) {
-    task.status = "blocked";
-    task.commandResult = revParse;
-    task.notes = "Target repository is not a git repository";
-    return;
-  }
-
-  await ensureDir(worker.worktreeRoot);
-
-  const wtList = await execCommandCapture("git worktree list --porcelain", worker.repoPath);
-  const already = wtList.ok && wtList.stdout.includes(`worktree ${wtPath}`);
-
-  if (!already) {
-    const add = await execCommandCapture(
-      `git worktree add -b ${branch} "${wtPath}" ${baseBranch}`,
-      worker.repoPath,
-    );
-    if (!add.ok) {
-      task.status = "blocked";
-      task.commandResult = add;
-      task.notes = "Failed to create git worktree";
-      return;
-    }
-  }
-
-  const role = state.agentRoles[task.assignee]?.role ?? "developer";
-  const focus = state.agentRoles[task.assignee]?.focus ?? "";
-  const personality = state.agentRoles[task.assignee]?.personality ?? "";
-  const prompt = [
-    `あなたは役割=${role} です。`,
-    focus ? `注力点: ${focus}` : "",
-    personality ? `性格: ${personality}` : "",
-    `ストーリー: ${story}`,
-    `担当タスク: ${task.title}`,
-    `詳細: ${task.description}`,
-    "変更後に必要なら最小限のテスト/検証を実施してください。",
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  const codexCmd = `${worker.codexCmd} exec ${JSON.stringify(prompt)}`;
-  const codexRes = await execCommandCapture(codexCmd, wtPath);
-  task.commandResult = codexRes;
-
-  const diffRes = await execCommandCapture("git diff --stat", wtPath);
-  task.notes = diffRes.ok ? diffRes.stdout.trim() : "No diff summary available";
-
-  if (!codexRes.ok) {
-    task.status = "blocked";
-    addActivityEvent({
-      id: issueTaskId("evt"),
-      timestamp: getIsoTime(),
-      type: "agent",
-      action: "subtask_failed",
-      detail: `${task.title} failed`,
-      workflowId,
-      agentId: task.assignee,
-    });
-    return;
-  }
-
-  if (autoVerify) {
-    try {
-      const policy = await loadRepoPolicy(worker.repoPath);
-      const verifyKey = state.agentRoles[task.assignee]?.verifyCommandKey ?? "test";
-      const resolved = resolveCommandFromPolicy(policy, verifyKey);
-      task.verifyResult = await execCommandCapture(resolved.command, wtPath);
-      if (!task.verifyResult.ok) {
-        task.status = "blocked";
-        task.notes = `${task.notes ?? ""}\nVerification failed: ${verifyKey}`.trim();
-      } else {
-        task.status = "wait_accept";
-      }
-    } catch {
-      task.status = "wait_accept";
-      task.notes = `${task.notes ?? ""}\nVerification skipped (policy/command unavailable)`.trim();
-    }
-  } else {
-    task.status = "wait_accept";
-  }
-
-  addActivityEvent({
-    id: issueTaskId("evt"),
-    timestamp: getIsoTime(),
-    type: "agent",
-    action: "subtask_complete",
-    detail: `${task.title} -> ${task.status}`,
-    workflowId,
-    agentId: task.assignee,
-  });
-};
-
 export const registerRunStoryWorkflowTool = (server: McpServer) =>
   server.registerTool(
     "runStoryWorkflow",
     {
       title: "runStoryWorkflow",
       description:
-        "Run story-driven collaborative workflow: clarify questions, decompose tasks, execute by role, verify, and report.",
+        "PM/planning gateway: clarify requirements and decompose a story into backlog tasks.",
       inputSchema: {
         workflowId: z.string().optional(),
         story: z.string().optional(),
@@ -189,13 +55,30 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
             }),
           )
           .optional(),
-        autoExecute: z.boolean().default(true),
-        autoVerify: z.boolean().default(true),
-        baseBranch: z.string().default("main"),
-        planningAutoAccept: z.boolean().default(true),
+        autoExecute: z.boolean().optional(),
+        autoVerify: z.boolean().optional(),
+        baseBranch: z.string().optional(),
+        planningAutoAccept: z.boolean().optional(),
       },
     },
     async ({ workflowId, story, answers, autoExecute, autoVerify, baseBranch, planningAutoAccept }) => {
+      if (autoExecute || planningAutoAccept || autoVerify || baseBranch) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Execution options are disabled. Use claimTask/submitTask and PM review tools.",
+            },
+          ],
+          structuredContent: {
+            ok: false,
+            error: "WORKFLOW_EXECUTION_DISABLED",
+            hint: "runStoryWorkflow is planning-only. Use claimTask -> submitTask -> acceptTask/rejectTask.",
+          },
+          isError: true,
+        };
+      }
+
       let workflow = workflowId ? findWorkflow(workflowId) : undefined;
 
       if (!workflow) {
@@ -290,67 +173,8 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
         });
       }
 
-      if (!autoExecute) {
-        workflow.status = "ready";
-        workflow.updatedAt = getIsoTime();
-        return {
-          content: [{ type: "text", text: "workflow ready" }],
-          structuredContent: {
-            ok: true,
-            workflowId: workflow.id,
-            status: workflow.status,
-            tasks: workflow.tasks,
-          },
-        };
-      }
-
-      workflow.status = "executing";
-      workflow.updatedAt = getIsoTime();
-
-      for (const task of workflow.tasks) {
-        if (task.status === "todo" || task.status === "doing") {
-          await runSubTask(workflow.id, task, workflow.story, baseBranch, autoVerify);
-        }
-
-        if (planningAutoAccept && task.status === "wait_accept") {
-          task.status = "done";
-          task.notes = (task.notes ? task.notes + "\n" : "") + "Accepted by planning agent";
-          addActivityEvent({
-            id: issueTaskId("evt"),
-            timestamp: getIsoTime(),
-            type: "workflow",
-            action: "planning_accept_task",
-            detail: task.taskId + " accepted by planning",
-            workflowId: workflow.id,
-          });
-        }
-
-        const taskInState = state.tasks.find((t) => t.id === task.taskId);
-        if (taskInState) {
-          taskInState.status = task.status;
-          taskInState.updatedAt = getIsoTime();
-        }
-      }
-
-      const blocked = workflow.tasks.filter((t) => t.status === "blocked").length;
-      const waitAccept = workflow.tasks.filter((t) => t.status === "wait_accept").length;
-      const done = workflow.tasks.filter((t) => t.status === "done").length;
-
-      if (blocked > 0) {
-        workflow.status = "blocked";
-      } else if (done + waitAccept === workflow.tasks.length) {
-        workflow.status = "reported";
-      } else {
-        workflow.status = "verified";
-      }
-
-      workflow.report = [
-        `workflow=${workflow.id}`,
-        `status=${workflow.status}`,
-        `done=${done}/${workflow.tasks.length}`,
-        "wait_accept=" + waitAccept,
-        `blocked=${blocked}`,
-      ].join("; ");
+      workflow.status = "ready";
+      workflow.report = `workflow=${workflow.id}; status=ready; tasks=${workflow.tasks.length}`;
       workflow.updatedAt = getIsoTime();
 
       addActivityEvent({
@@ -370,7 +194,6 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
           status: workflow.status,
           report: workflow.report,
           tasks: workflow.tasks,
-          activityTail: state.activityLog.slice(Math.max(0, state.activityLog.length - 30)),
         },
       };
     },

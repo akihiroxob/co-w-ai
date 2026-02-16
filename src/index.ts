@@ -17,11 +17,11 @@ import {
   registerPingTool,
   registerEnqueueTaskTool,
   registerStatusTool,
+  registerClaimTaskTool,
+  registerSubmitTaskTool,
   registerAcceptTaskTool,
+  registerRejectTaskTool,
   registerSpawnWorkerTool,
-  registerStartRunWorkerTaskTool,
-  registerGetRunStatusTool,
-  registerListRunsTool,
   registerRunStoryWorkflowTool,
   registerActivityLogTool,
 } from "./tools";
@@ -29,11 +29,11 @@ import {
 registerPingTool(server);
 registerEnqueueTaskTool(server);
 registerStatusTool(server);
+registerClaimTaskTool(server);
+registerSubmitTaskTool(server);
 registerAcceptTaskTool(server);
+registerRejectTaskTool(server);
 registerSpawnWorkerTool(server);
-registerStartRunWorkerTaskTool(server);
-registerGetRunStatusTool(server);
-registerListRunsTool(server);
 registerRunStoryWorkflowTool(server);
 registerActivityLogTool(server);
 

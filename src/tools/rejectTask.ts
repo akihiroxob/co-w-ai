@@ -4,17 +4,18 @@ import { addActivityEvent, findTask } from "../libs/state";
 import { issueTaskId } from "../utils/idUtil";
 import { getIsoTime } from "../utils/timeUtil";
 
-export const registerAcceptTaskTool = (server: McpServer) =>
+export const registerRejectTaskTool = (server: McpServer) =>
   server.registerTool(
-    "acceptTask",
+    "rejectTask",
     {
-      title: "acceptTask",
-      description: "Planning acceptance step: move task from wait_accept to done.",
+      title: "rejectTask",
+      description: "Planning rejection step: move task from wait_accept back to todo.",
       inputSchema: {
         taskId: z.string().min(1),
+        reason: z.string().min(1),
       },
     },
-    async ({ taskId }) => {
+    async ({ taskId, reason }) => {
       const task = findTask(taskId);
       if (!task) {
         return {
@@ -32,19 +33,20 @@ export const registerAcceptTaskTool = (server: McpServer) =>
         };
       }
 
-      task.status = "done";
+      task.status = "todo";
       task.updatedAt = getIsoTime();
+
       addActivityEvent({
         id: issueTaskId("evt"),
         timestamp: task.updatedAt,
         type: "workflow",
-        action: "planning_accept_task",
-        detail: `${taskId} accepted`,
+        action: "planning_reject_task",
+        detail: `${taskId} rejected: ${reason.trim()}`,
       });
 
       return {
-        content: [{ type: "text", text: `Accepted: ${taskId}` }],
-        structuredContent: { ok: true, task },
+        content: [{ type: "text", text: `Rejected: ${taskId}` }],
+        structuredContent: { ok: true, task, reason: reason.trim() },
       };
     },
   );

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 import { workers } from "../libs/workers";
@@ -20,15 +20,32 @@ type WorkerDoc = {
   }>;
 };
 
+const existsFile = async (p: string) => {
+  try {
+    const s = await stat(p);
+    return s.isFile();
+  } catch {
+    return false;
+  }
+};
+
+const resolveWorkersConfigPath = async (cwd: string, filePath?: string) => {
+  if (filePath && filePath.trim().length > 0) {
+    return path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
+  }
+
+  const workdirConfig = path.resolve(cwd, "settings/workers.yaml");
+  if (await existsFile(workdirConfig)) return workdirConfig;
+
+  const orchestratorDefault = path.resolve(__dirname, "../../settings/workers.yaml");
+  return orchestratorDefault;
+};
+
 export const preloadWorkersFromConfig = async (
   cwd: string,
   filePath?: string,
 ): Promise<{ path: string; loaded: Worker[]; loadedRoles: AgentRoleProfile[] }> => {
-  const targetPath = filePath
-    ? path.isAbsolute(filePath)
-      ? filePath
-      : path.resolve(cwd, filePath)
-    : path.resolve(cwd, "settings/workers.yaml");
+  const targetPath = await resolveWorkersConfigPath(cwd, filePath);
 
   const text = await readFile(targetPath, "utf8");
   const parsed = (YAML.parse(text) ?? {}) as WorkerDoc;
