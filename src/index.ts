@@ -16,7 +16,6 @@ const server = new McpServer({ name: "orchestrator", version: "0.5.2" });
 // -------------------------
 import {
   registerPingTool,
-  registerEnqueueTaskTool,
   registerStatusTool,
   registerClaimTaskTool,
   registerSubmitTaskTool,
@@ -28,7 +27,6 @@ import {
 } from "./tools";
 
 registerPingTool(server);
-registerEnqueueTaskTool(server);
 registerStatusTool(server);
 registerClaimTaskTool(server);
 registerSubmitTaskTool(server);

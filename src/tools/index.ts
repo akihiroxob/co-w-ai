@@ -1,5 +1,4 @@
 export { registerPingTool } from "./ping";
-export { registerEnqueueTaskTool } from "./enqueueTask";
 export { registerStatusTool } from "./status";
 export { registerClaimTaskTool } from "./claimTask";
 export { registerSubmitTaskTool } from "./submitTask";
@@ -10,4 +9,4 @@ export { registerRunStoryWorkflowTool } from "./runStoryWorkflow";
 export { registerActivityLogTool } from "./activityLog";
 
 // Admin-only tools (kept in code, not registered by default):
-// runCommand, applyPatch, verifyTask, cleanupWorktree
+// runCommand, applyPatch, verifyTask, cleanupWorktree, enqueueTask
