@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { findTask } from "../libs/state.js";
-import { getIsoTime } from "../utils/timeUtil.js";
+import { findTask } from "../../libs/state.js";
+import { getIsoTime } from "../../utils/timeUtil.js";
 
 export const registerAssignTaskTool = (server: McpServer) => {
   server.registerTool(

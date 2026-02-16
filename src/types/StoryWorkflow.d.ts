@@ -13,6 +13,7 @@ export type AgentRoleProfile = {
   agentId: string;
   role: string;
   focus?: string;
+  personality?: string;
   verifyCommandKey?: string;
 };
 
@@ -54,4 +55,5 @@ export type ActivityEvent = {
   detail: string;
   workflowId?: string;
   agentId?: string;
+  runId?: string;
 };

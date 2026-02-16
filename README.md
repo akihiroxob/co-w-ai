@@ -2,14 +2,9 @@
 
 Story-driven multi-agent orchestrator for collaborative development via MCP tools.
 
-## What it does
-- Auto-load default agent roles at server startup.
-- Override roles per repository with `<repo>/.agent/roles.md`.
-- Accept a development story and generate clarifying questions.
-- Decompose clarified stories into tasks and assign by role.
-- Run collaborative implementation in git worktrees.
-- Verify outputs with policy-based commands.
-- Expose agent/system activity logs for observability.
+## Architecture
+- Human <-> Codex (MCP client) <-> Planning flow (`runStoryWorkflow`) -> Worker agents
+- Worker + role/personality settings are unified in `settings/workers.yaml`.
 
 ## Build & Run
 ```bash
@@ -18,34 +13,46 @@ pnpm build
 pnpm start
 ```
 
-## Role Loading Priority
-1. Startup default roles: `settings/default.roles.md`
-2. Optional startup override path: env `COWAI_DEFAULT_ROLES_FILE`
-3. Repo override on `spawnWorker`: `<repo>/.agent/roles.md`
-4. Manual load: `loadAgentRoles` tool
+## Single Config Policy
+Use only `settings/workers.yaml` for MCP-side configuration.
+Each worker entry can include both runtime and role profile fields:
+- runtime: `agentId`, `repoPath`, `worktreeDirName`, `codexCmd`
+- role profile: `role`, `focus`, `personality`, `verifyCommandKey`
 
-Repo override and manual load update matching `agentId` entries.
+No split config is required.
 
-## Reliability Notes
-- `runWorkerTask` resolves base branch automatically when omitted:
-  - preferred input -> `origin/HEAD` -> `main` -> `master` -> current `HEAD`
-- `runWorkerTask` supports `timeoutMs` and returns timeout state in command result (`timedOut`).
-- Lifecycle events are written to `activityLog` for start, branch/worktree, codex, verify, diff, and failure.
-- `setTaskStatus` blocks `done` when worker provenance/verification requirements are not met.
-- `cleanupWorktree` supports `archiveBeforeForce` and `deleteBranch` options.
+## Worker Boot
+- Default config file: `settings/workers.yaml`
+- Optional override: `COWAI_WORKERS_FILE`
+- Workers and role profiles are preloaded at startup.
+- `spawnWorker` is for temporary/manual registration when needed.
 
-## MCP Tools (workflow)
-- `loadAgentRoles`: load role profiles from markdown (default `<repo>/.agent/roles.md`).
-- `runStoryWorkflow`: story intake, clarification, decomposition, execution, verification, reporting.
-- `activityLog`: inspect what each agent/system did.
-- `status`: global snapshot including workflows, task run metadata, and activity tail.
+## Task Status
+- `todo` -> `doing` -> `wait_accept` -> `done`
+- `blocked` is used when execution/verification fails.
+- `wait_accept` is accepted by Planning flow (default) or manually via `acceptTask`.
 
-## Recommended Usage Flow
-1. Register workers (`spawnWorker`).
-2. (Optional) `loadAgentRoles` if you want explicit role reload.
-3. Start with story (`runStoryWorkflow` with `story`).
-4. If questions are returned, answer them (`runStoryWorkflow` with `workflowId` + `answers`).
-5. Review report and traces (`activityLog` or `status`).
+## Async Run API (recommended)
+- `startRunWorkerTask`: start execution and get `runId` immediately.
+- `getRunStatus`: poll by `runId`.
+- `listRuns`: list/filter runs by task/agent/status.
+- `activityLog`: filter by `runId` and use `format=lines` for terminal viewing.
 
-## Policy
-Verification uses `<repo>/.agent/policy.yaml` command keys (for example `test`, `lint`, `typecheck`).
+## Planning Bridge Flow
+1. Human sends story via Codex.
+2. Codex calls `runStoryWorkflow`.
+3. Planning phase returns clarification questions.
+4. Human answers via Codex; Codex calls `runStoryWorkflow` again with `answers`.
+5. Tasks are decomposed and executed by workers.
+6. Planning flow accepts completed subtasks (`wait_accept` -> `done`).
+7. Human accepts story outcome; if insufficient, submits follow-up story.
+
+## Multi-Terminal Monitoring
+- Terminal A: submit stories/tasks (`runStoryWorkflow`, `startRunWorkerTask`).
+- Terminal B: monitor `activityLog` and `status`.
+- Terminal C: inspect worktree diffs and apply patches.
+
+## Budget Tips
+- Poll `activityLog`/`status` every 15-30s instead of continuously.
+- Reuse a single `status` snapshot before follow-up actions.
+- Skip redundant LLM calls when no new inputs are available.

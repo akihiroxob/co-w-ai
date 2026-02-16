@@ -1,4 +1,4 @@
-export type TaskStatus = "todo" | "doing" | "review" | "done" | "blocked";
+export type TaskStatus = "todo" | "doing" | "wait_accept" | "done" | "blocked";
 export type Task = {
   id: string;
   title: string;

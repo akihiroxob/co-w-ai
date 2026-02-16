@@ -1,14 +1,13 @@
 export { registerPingTool } from "./ping";
 export { registerEnqueueTaskTool } from "./enqueueTask";
 export { registerStatusTool } from "./status";
-export { registerSetTaskStatusTool } from "./setTaskStatus";
-export { registerAssignTaskTool } from "./assignTask";
-export { registerRunCommandTool } from "./runCommand";
+export { registerAcceptTaskTool } from "./acceptTask";
 export { registerSpawnWorkerTool } from "./spawnWorker";
-export { registerRunWorkerTaskTool } from "./runWorkerTask";
-export { registerApplyPatchTool } from "./applyPatch";
-export { registerVerifyTaskTool } from "./verifyTask";
-export { registerCleanupWorktreeTool } from "./cleanupWorktree";
-export { registerLoadAgentRolesTool } from "./loadAgentRoles";
+export { registerStartRunWorkerTaskTool } from "./startRunWorkerTask";
+export { registerGetRunStatusTool } from "./getRunStatus";
+export { registerListRunsTool } from "./listRuns";
 export { registerRunStoryWorkflowTool } from "./runStoryWorkflow";
 export { registerActivityLogTool } from "./activityLog";
+
+// Admin-only tools (kept in code, not registered by default):
+// setTaskStatus, assignTask, runCommand, runWorkerTask, applyPatch, verifyTask, cleanupWorktree

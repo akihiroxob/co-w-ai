@@ -1,17 +1,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { findTask, state } from "../libs/state";
-import { getIsoTime } from "../utils/timeUtil";
+import { findTask, state } from "../../libs/state";
+import { getIsoTime } from "../../utils/timeUtil";
 
 export const registerSetTaskStatusTool = (server: McpServer) =>
   server.registerTool(
     "setTaskStatus",
     {
       title: "setTaskStatus",
-      description: "Update a task status. Allowed: todo/doing/review/done/blocked",
+      description: "Update a task status. Allowed: todo/doing/wait_accept/done/blocked",
       inputSchema: {
         taskId: z.string().min(1),
-        status: z.enum(["todo", "doing", "review", "done", "blocked"]),
+        status: z.enum(["todo", "doing", "wait_accept", "done", "blocked"]),
       },
     },
     async ({ taskId, status }) => {
@@ -25,6 +25,19 @@ export const registerSetTaskStatusTool = (server: McpServer) =>
       }
 
       if (status === "done") {
+        if (task.status !== "wait_accept") {
+          return {
+            content: [{ type: "text", text: `Cannot set done unless task is wait_accept: ${taskId}` }],
+            structuredContent: {
+              ok: false,
+              error: "INVALID_TRANSITION",
+              from: task.status,
+              to: status,
+            },
+            isError: true,
+          };
+        }
+
         const meta = state.taskRunMeta[taskId];
         if (meta) {
           if (!meta.provenanceOk) {

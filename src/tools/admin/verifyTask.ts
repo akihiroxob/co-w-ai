@@ -1,11 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { workers } from "../libs/workers";
-import { execCommandCapture } from "../utils/shellUtil";
-import { worktreePathFor } from "../utils/gitUtil";
-import { state } from "../libs/state";
-import { loadRepoPolicy } from "../utils/policyUtil";
-import { resolveCommandFromPolicy } from "../utils/shellUtil";
+import { workers } from "../../libs/workers";
+import { execCommandCapture } from "../../utils/shellUtil";
+import { worktreePathFor } from "../../utils/gitUtil";
+import { state } from "../../libs/state";
+import { loadRepoPolicy } from "../../utils/policyUtil";
+import { resolveCommandFromPolicy } from "../../utils/shellUtil";
 
 export const registerVerifyTaskTool = (server: McpServer) =>
   server.registerTool(

@@ -4,10 +4,7 @@ import { z } from "zod";
 import { ensureDir } from "../utils/fsUtil";
 import { Worker } from "../types/Worker";
 import { workers } from "../libs/workers";
-import { addActivityEvent } from "../libs/state";
-import { getIsoTime } from "../utils/timeUtil";
-import { issueTaskId } from "../utils/idUtil";
-import { applyAgentRoles, loadAgentRolesFromMarkdown } from "../utils/agentRoleUtil";
+import { applyAgentRoles } from "../utils/agentRoleUtil";
 
 export const registerSpawnWorkerTool = (server: McpServer) =>
   server.registerTool(
@@ -15,15 +12,19 @@ export const registerSpawnWorkerTool = (server: McpServer) =>
     {
       title: "spawnWorker",
       description:
-        "Register a worker agent bound to a git repository. This does not start a persistent process; it stores config for later runWorkerTask().",
+        "Register a worker agent bound to a git repository. Preferred source is settings/workers.yaml at startup.",
       inputSchema: {
-        agentId: z.string().min(1), // "B1"
-        repoPath: z.string().min(1), // "/path/to/repo"
-        worktreeDirName: z.string().optional(), // default ".worktrees"
-        codexCmd: z.string().optional(), // default env CODEX_CMD or "codex"
+        agentId: z.string().min(1),
+        repoPath: z.string().min(1),
+        worktreeDirName: z.string().optional(),
+        codexCmd: z.string().optional(),
+        role: z.string().optional(),
+        focus: z.string().optional(),
+        personality: z.string().optional(),
+        verifyCommandKey: z.string().optional(),
       },
     },
-    async ({ agentId, repoPath, worktreeDirName, codexCmd }) => {
+    async ({ agentId, repoPath, worktreeDirName, codexCmd, role, focus, personality, verifyCommandKey }) => {
       const absRepo = path.isAbsolute(repoPath) ? repoPath : path.resolve(process.cwd(), repoPath);
       const wtRoot = path.join(absRepo, worktreeDirName ?? ".worktrees");
 
@@ -35,36 +36,28 @@ export const registerSpawnWorkerTool = (server: McpServer) =>
       };
 
       await ensureDir(worker.worktreeRoot);
-
       workers.set(agentId, worker);
 
-      let overrideLoaded = 0;
-      let overridePath: string | null = null;
-      try {
-        const loaded = await loadAgentRolesFromMarkdown(worker.repoPath);
-        applyAgentRoles(loaded.roles, false);
-        overrideLoaded = loaded.roles.length;
-        overridePath = loaded.path;
-        addActivityEvent({
-          id: issueTaskId("evt"),
-          timestamp: getIsoTime(),
-          type: "system",
-          action: "load_roles_repo_override",
-          detail: `loaded ${loaded.roles.length} role(s) from ${loaded.path}`,
-          agentId,
-        });
-      } catch {
-        // repo override file is optional
+      if (role) {
+        applyAgentRoles(
+          [
+            {
+              agentId,
+              role,
+              focus,
+              personality,
+              verifyCommandKey,
+            },
+          ],
+          false,
+        );
       }
 
       return {
         content: [{ type: "text", text: `Worker registered: ${agentId}` }],
         structuredContent: {
           ...worker,
-          repoRoleOverride: {
-            loaded: overrideLoaded,
-            sourcePath: overridePath,
-          },
+          roleProfileApplied: Boolean(role),
         },
       };
     },

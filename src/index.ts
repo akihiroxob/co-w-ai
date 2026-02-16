@@ -1,14 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { applyAgentRoles, loadDefaultAgentRoles } from "./utils/agentRoleUtil";
 import { addActivityEvent } from "./libs/state";
 import { issueTaskId } from "./utils/idUtil";
 import { getIsoTime } from "./utils/timeUtil";
+import { preloadWorkersFromConfig } from "./utils/workerBootstrap";
 
 // -------------------------
 // Server
 // -------------------------
-const server = new McpServer({ name: "orchestrator", version: "0.3.1" });
+const server = new McpServer({ name: "orchestrator", version: "0.5.2" });
 
 // -------------------------
 // Tools
@@ -17,15 +17,11 @@ import {
   registerPingTool,
   registerEnqueueTaskTool,
   registerStatusTool,
-  registerSetTaskStatusTool,
-  registerAssignTaskTool,
-  registerRunCommandTool,
+  registerAcceptTaskTool,
   registerSpawnWorkerTool,
-  registerRunWorkerTaskTool,
-  registerApplyPatchTool,
-  registerVerifyTaskTool,
-  registerCleanupWorktreeTool,
-  registerLoadAgentRolesTool,
+  registerStartRunWorkerTaskTool,
+  registerGetRunStatusTool,
+  registerListRunsTool,
   registerRunStoryWorkflowTool,
   registerActivityLogTool,
 } from "./tools";
@@ -33,35 +29,29 @@ import {
 registerPingTool(server);
 registerEnqueueTaskTool(server);
 registerStatusTool(server);
-registerSetTaskStatusTool(server);
-registerAssignTaskTool(server);
-registerRunCommandTool(server);
+registerAcceptTaskTool(server);
 registerSpawnWorkerTool(server);
-registerRunWorkerTaskTool(server);
-registerApplyPatchTool(server);
-registerVerifyTaskTool(server);
-registerCleanupWorktreeTool(server);
-registerLoadAgentRolesTool(server);
+registerStartRunWorkerTaskTool(server);
+registerGetRunStatusTool(server);
+registerListRunsTool(server);
 registerRunStoryWorkflowTool(server);
 registerActivityLogTool(server);
 
-async function preloadDefaultRoles() {
+async function preloadWorkers() {
   try {
-    const loaded = await loadDefaultAgentRoles(
-      process.cwd(),
-      process.env.COWAI_DEFAULT_ROLES_FILE,
-    );
-    applyAgentRoles(loaded.roles, false);
+    const loaded = await preloadWorkersFromConfig(process.cwd(), process.env.COWAI_WORKERS_FILE);
     addActivityEvent({
       id: issueTaskId("evt"),
       timestamp: getIsoTime(),
       type: "system",
-      action: "load_roles_default",
-      detail: `loaded ${loaded.roles.length} role(s) from ${loaded.path}`,
+      action: "preload_workers",
+      detail: `loaded ${loaded.loaded.length} worker(s), ${loaded.loadedRoles.length} role profile(s) from ${loaded.path}`,
     });
-    console.error(`Default roles loaded: ${loaded.roles.length} (${loaded.path})`);
+    console.error(
+      `Workers preloaded: ${loaded.loaded.length}, roles: ${loaded.loadedRoles.length} (${loaded.path})`,
+    );
   } catch (e: any) {
-    console.error(`Default roles not loaded: ${String(e?.message ?? e)}`);
+    console.error(`Workers not preloaded: ${String(e?.message ?? e)}`);
   }
 }
 
@@ -70,10 +60,10 @@ async function preloadDefaultRoles() {
 // -------------------------
 async function main() {
   console.error("MCP Orchestrator starting (stdio) ...");
-  await preloadDefaultRoles();
+  await preloadWorkers();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("MCP Orchestrator connected");
+  console.error("MCP Orchestrator cowai has connected");
 }
 
 main().catch((err) => {

@@ -1,6 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import path from "node:path";
 import { workers } from "../libs/workers";
 import { addActivityEvent, findWorkflow, state } from "../libs/state";
 import { issueTaskId } from "../utils/idUtil";
@@ -12,7 +11,6 @@ import { ensureDir } from "../utils/fsUtil";
 import { safeBranchName, worktreePathFor } from "../utils/gitUtil";
 import { execCommandCapture, resolveCommandFromPolicy } from "../utils/shellUtil";
 import { loadRepoPolicy } from "../utils/policyUtil";
-import { loadAgentRolesFromMarkdown } from "../utils/agentRoleUtil";
 
 const applyAnswers = (
   workflow: StoryWorkflow,
@@ -108,9 +106,11 @@ const runSubTask = async (
 
   const role = state.agentRoles[task.assignee]?.role ?? "developer";
   const focus = state.agentRoles[task.assignee]?.focus ?? "";
+  const personality = state.agentRoles[task.assignee]?.personality ?? "";
   const prompt = [
     `あなたは役割=${role} です。`,
     focus ? `注力点: ${focus}` : "",
+    personality ? `性格: ${personality}` : "",
     `ストーリー: ${story}`,
     `担当タスク: ${task.title}`,
     `詳細: ${task.description}`,
@@ -147,17 +147,17 @@ const runSubTask = async (
       const resolved = resolveCommandFromPolicy(policy, verifyKey);
       task.verifyResult = await execCommandCapture(resolved.command, wtPath);
       if (!task.verifyResult.ok) {
-        task.status = "review";
+        task.status = "blocked";
         task.notes = `${task.notes ?? ""}\nVerification failed: ${verifyKey}`.trim();
       } else {
-        task.status = "done";
+        task.status = "wait_accept";
       }
     } catch {
-      task.status = "done";
+      task.status = "wait_accept";
       task.notes = `${task.notes ?? ""}\nVerification skipped (policy/command unavailable)`.trim();
     }
   } else {
-    task.status = "done";
+    task.status = "wait_accept";
   }
 
   addActivityEvent({
@@ -192,9 +192,10 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
         autoExecute: z.boolean().default(true),
         autoVerify: z.boolean().default(true),
         baseBranch: z.string().default("main"),
+        planningAutoAccept: z.boolean().default(true),
       },
     },
-    async ({ workflowId, story, answers, autoExecute, autoVerify, baseBranch }) => {
+    async ({ workflowId, story, answers, autoExecute, autoVerify, baseBranch, planningAutoAccept }) => {
       let workflow = workflowId ? findWorkflow(workflowId) : undefined;
 
       if (!workflow) {
@@ -257,29 +258,7 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
       }
 
       if (workflow.tasks.length === 0) {
-        let roles = Object.values(state.agentRoles);
-        if (roles.length === 0) {
-          const fallbackRepoPath = workers.values().next().value?.repoPath;
-          if (fallbackRepoPath) {
-            try {
-              const loaded = await loadAgentRolesFromMarkdown(fallbackRepoPath);
-              for (const role of loaded.roles) {
-                state.agentRoles[role.agentId] = role;
-              }
-              roles = Object.values(state.agentRoles);
-              addActivityEvent({
-                id: issueTaskId("evt"),
-                timestamp: getIsoTime(),
-                type: "system",
-                action: "load_roles_md_auto",
-                detail: `loaded ${loaded.roles.length} role(s) from ${loaded.path}`,
-                workflowId: workflow.id,
-              });
-            } catch {
-              // explicit load tool can provide detailed error
-            }
-          }
-        }
+        const roles = Object.values(state.agentRoles);
 
         if (roles.length === 0) {
           return {
@@ -287,7 +266,7 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
             structuredContent: {
               ok: false,
               error: "AGENT_ROLES_REQUIRED",
-              hint: "Prepare <repo>/.agent/roles.md and call loadAgentRoles",
+              hint: "Define role profile fields directly in settings/workers.yaml",
               workflowId: workflow.id,
             },
             isError: true,
@@ -333,6 +312,19 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
           await runSubTask(workflow.id, task, workflow.story, baseBranch, autoVerify);
         }
 
+        if (planningAutoAccept && task.status === "wait_accept") {
+          task.status = "done";
+          task.notes = (task.notes ? task.notes + "\n" : "") + "Accepted by planning agent";
+          addActivityEvent({
+            id: issueTaskId("evt"),
+            timestamp: getIsoTime(),
+            type: "workflow",
+            action: "planning_accept_task",
+            detail: task.taskId + " accepted by planning",
+            workflowId: workflow.id,
+          });
+        }
+
         const taskInState = state.tasks.find((t) => t.id === task.taskId);
         if (taskInState) {
           taskInState.status = task.status;
@@ -341,12 +333,12 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
       }
 
       const blocked = workflow.tasks.filter((t) => t.status === "blocked").length;
-      const review = workflow.tasks.filter((t) => t.status === "review").length;
+      const waitAccept = workflow.tasks.filter((t) => t.status === "wait_accept").length;
       const done = workflow.tasks.filter((t) => t.status === "done").length;
 
       if (blocked > 0) {
         workflow.status = "blocked";
-      } else if (done === workflow.tasks.length && review === 0) {
+      } else if (done + waitAccept === workflow.tasks.length) {
         workflow.status = "reported";
       } else {
         workflow.status = "verified";
@@ -356,7 +348,7 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
         `workflow=${workflow.id}`,
         `status=${workflow.status}`,
         `done=${done}/${workflow.tasks.length}`,
-        `review=${review}`,
+        "wait_accept=" + waitAccept,
         `blocked=${blocked}`,
       ].join("; ");
       workflow.updatedAt = getIsoTime();

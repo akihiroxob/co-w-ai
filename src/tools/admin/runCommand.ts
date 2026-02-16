@@ -1,11 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { runShellCommand } from "../utils/shellUtil";
-import { state } from "../libs/state.js";
-import { workers } from "../libs/workers";
-import { loadRepoPolicy } from "../utils/policyUtil";
-import { resolveCommandFromPolicy } from "../utils/shellUtil";
-import { resolveCwdWithinRepo } from "../utils/gitUtil";
+import { runShellCommand } from "../../utils/shellUtil";
+import { state } from "../../libs/state.js";
+import { workers } from "../../libs/workers";
+import { loadRepoPolicy } from "../../utils/policyUtil";
+import { resolveCommandFromPolicy } from "../../utils/shellUtil";
+import { resolveCwdWithinRepo } from "../../utils/gitUtil";
 
 export const registerRunCommandTool = (server: McpServer) =>
   server.registerTool(

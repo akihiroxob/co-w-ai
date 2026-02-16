@@ -1,13 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { workers } from "../libs/workers";
-import { execCommandCapture } from "../utils/shellUtil";
-import { taskBranchName, worktreePathFor } from "../utils/gitUtil";
+import { workers } from "../../libs/workers";
+import { execCommandCapture } from "../../utils/shellUtil";
+import { taskBranchName, worktreePathFor } from "../../utils/gitUtil";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
-import { addActivityEvent } from "../libs/state";
-import { issueTaskId } from "../utils/idUtil";
-import { getIsoTime } from "../utils/timeUtil";
+import { addActivityEvent } from "../../libs/state";
+import { issueTaskId } from "../../utils/idUtil";
+import { getIsoTime } from "../../utils/timeUtil";
 
 export const registerCleanupWorktreeTool = (server: McpServer) =>
   server.registerTool(

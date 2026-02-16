@@ -45,7 +45,8 @@ export const buildWorkflowTasks = (
     .filter((x) => x.length > 0)
     .slice(0, 3);
 
-  const developers = roles.filter((r) => !/(qa|review|test)/i.test(r.role));
+  const planning = pickRole("planning", roles);
+  const developers = roles.filter((r) => !/(qa|review|test|planning)/i.test(r.role));
   const qa = pickRole("qa", roles);
   const reviewers = pickRole("review", roles);
 
@@ -72,9 +73,10 @@ export const buildWorkflowTasks = (
 
   tasks.push({
     taskId: issueTaskId("storytask"),
-    title: "検査",
-    description: "変更結果を検査し、合格判定を行う",
-    assignee: qa[0]?.agentId ?? reviewers[0]?.agentId ?? fallbackAssignee,
+    title: "検査/受け入れ",
+    description: "変更結果を検査し、受け入れ判定を行う",
+    assignee:
+      planning[0]?.agentId ?? qa[0]?.agentId ?? reviewers[0]?.agentId ?? fallbackAssignee,
     status: "todo" as TaskStatus,
   });
 

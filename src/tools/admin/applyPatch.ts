@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { workers } from "../libs/workers";
-import { execCommandCapture } from "../utils/shellUtil";
-import { worktreePathFor, applyPatchInDir } from "../utils/gitUtil";
+import { workers } from "../../libs/workers";
+import { execCommandCapture } from "../../utils/shellUtil";
+import { worktreePathFor, applyPatchInDir } from "../../utils/gitUtil";
 
 export const registerApplyPatchTool = (server: McpServer) =>
   server.registerTool(
