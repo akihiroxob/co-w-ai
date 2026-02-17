@@ -5,6 +5,7 @@ import { issueTaskId } from "./utils/idUtil";
 import { getIsoTime } from "./utils/timeUtil";
 import { preloadWorkersFromConfig } from "./utils/workerBootstrap";
 import { startAutoClaimLoop } from "./utils/autoClaimLoop";
+import { startWorkerExecutionLoop } from "./utils/workerExecutionLoop";
 
 // -------------------------
 // Server
@@ -24,6 +25,7 @@ import {
   registerSpawnWorkerTool,
   registerRunStoryWorkflowTool,
   registerActivityLogTool,
+  registerReloadConfigTool,
 } from "./tools";
 
 registerPingTool(server);
@@ -35,6 +37,7 @@ registerRejectTaskTool(server);
 registerSpawnWorkerTool(server);
 registerRunStoryWorkflowTool(server);
 registerActivityLogTool(server);
+registerReloadConfigTool(server);
 
 async function preloadWorkers() {
   try {
@@ -64,6 +67,12 @@ async function main() {
   if (autoClaim.enabled) {
     console.error(
       `Auto-claim loop enabled: interval=${autoClaim.intervalMs}ms, maxDoingPerAgent=${autoClaim.maxDoingPerAgent}`,
+    );
+  }
+  const autoExec = startWorkerExecutionLoop();
+  if (autoExec.enabled) {
+    console.error(
+      `Worker execution loop enabled: interval=${autoExec.intervalMs}ms, timeout=${autoExec.commandTimeoutMs}ms, autoVerify=${autoExec.autoVerify}, autoAccept=${autoExec.autoAccept}`,
     );
   }
   const transport = new StdioServerTransport();

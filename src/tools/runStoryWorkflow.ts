@@ -4,6 +4,7 @@ import { addActivityEvent, findWorkflow, state } from "../libs/state";
 import { issueTaskId } from "../utils/idUtil";
 import { getIsoTime } from "../utils/timeUtil";
 import { buildClarifyingQuestions, buildWorkflowTasks } from "../utils/workflowUtil";
+import { claimTaskForAgent } from "../utils/taskClaimUtil";
 import { StoryWorkflow, WorkflowTask } from "../types/StoryWorkflow";
 import { Task } from "../types/Task";
 
@@ -181,6 +182,25 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
           detail: `Created ${workflow.tasks.length} task(s)`,
           workflowId: workflow.id,
         });
+      }
+
+      if (autoExecute) {
+        let claimedCount = 0;
+        for (const wt of workflow.tasks) {
+          if (!wt.assignee) continue;
+          const result = await claimTaskForAgent(wt.taskId, wt.assignee);
+          if (result.ok) claimedCount += 1;
+        }
+        if (claimedCount > 0) {
+          addActivityEvent({
+            id: issueTaskId("evt"),
+            timestamp: getIsoTime(),
+            type: "workflow",
+            action: "workflow_auto_execute_claimed",
+            detail: `Auto-claimed ${claimedCount} task(s)`,
+            workflowId: workflow.id,
+          });
+        }
       }
 
       workflow.status = "ready";

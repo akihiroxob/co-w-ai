@@ -40,6 +40,13 @@ Policy resolution order for verification commands:
   - interval ms: `COWAI_AUTO_CLAIM_INTERVAL_MS` (default `5000`)
   - per-agent max doing: `COWAI_AUTO_CLAIM_MAX_DOING_PER_AGENT` (default `1`)
   - requires worktree creation permission (same requirement as manual `claimTask`)
+- Optional worker execution loop:
+  - enable: `COWAI_AUTO_EXECUTE=true`
+  - interval ms: `COWAI_AUTO_EXECUTE_INTERVAL_MS` (default `5000`)
+  - command timeout ms: `COWAI_AUTO_EXECUTE_TIMEOUT_MS` (default `1200000`)
+  - optional verify after worker command: `COWAI_AUTO_VERIFY_ON_EXECUTE=true`
+  - optional auto accept after submit: `COWAI_AUTO_ACCEPT_ON_EXECUTE=true`
+  - requires worker command to support: `<codexCmd> exec "<prompt>" --skip-git-repo-check`
 
 ## Task Status
 - `todo` -> `doing` -> `wait_accept` -> `done`
@@ -61,6 +68,17 @@ Policy resolution order for verification commands:
 - By default, execution flags (`autoExecute`, `autoVerify`, `planningAutoAccept`, `baseBranch`) are disabled.
 - To enable execution flags, set `COWAI_ENABLE_WORKFLOW_EXECUTION=true` in the MCP server environment.
 - Use `activityLog` for execution monitoring.
+- You can reload worker/role settings without server restart via `reloadConfig`.
+
+## Reload Config
+- Tool: `reloadConfig`
+- Default behavior:
+  - reload workers from `settings/workers.yaml` (or `COWAI_WORKERS_FILE`)
+  - replace in-memory worker/role entries
+  - clear policy cache
+- Optional input:
+  - `workersFile`: alternate config path
+  - `resetWorkers` / `resetRoles` / `clearPolicyCache`
 
 ## Environment Variables
 | Name | Purpose | Default | Notes |
@@ -69,6 +87,11 @@ Policy resolution order for verification commands:
 | `COWAI_AUTO_CLAIM` | Enable automatic `todo` -> `doing` claiming loop | `false` | Truthy values: `1`, `true`, `yes`, `on`. |
 | `COWAI_AUTO_CLAIM_INTERVAL_MS` | Auto-claim loop interval (ms) | `5000` | Invalid values fall back to default. |
 | `COWAI_AUTO_CLAIM_MAX_DOING_PER_AGENT` | Max concurrent `doing` tasks per agent in auto-claim loop | `1` | Invalid values fall back to default. |
+| `COWAI_AUTO_EXECUTE` | Enable automatic worker execution for `doing` tasks | `false` | Uses each worker's `codexCmd`. |
+| `COWAI_AUTO_EXECUTE_INTERVAL_MS` | Worker execution loop interval (ms) | `5000` | Invalid values fall back to default. |
+| `COWAI_AUTO_EXECUTE_TIMEOUT_MS` | Worker command timeout (ms) | `1200000` | Command is terminated on timeout. |
+| `COWAI_AUTO_VERIFY_ON_EXECUTE` | Run role verify command after worker execution | `false` | Requires `verifyCommandKey` and repo policy command. |
+| `COWAI_AUTO_ACCEPT_ON_EXECUTE` | Auto-accept after auto-submit | `false` | Skips manual PM acceptance. |
 | `COWAI_ENABLE_WORKFLOW_EXECUTION` | Enable execution flags in `runStoryWorkflow` (`autoExecute`, `autoVerify`, `planningAutoAccept`, `baseBranch`) | `false` | When disabled, `runStoryWorkflow` is planning-only. |
 
 ## Planning Bridge Flow
