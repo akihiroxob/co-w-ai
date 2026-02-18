@@ -14,6 +14,7 @@ type WorkerDoc = {
     worktreeDirName?: string;
     codexCmd?: string;
     role?: string;
+    isPm?: boolean;
     focus?: string;
     personality?: string;
     verifyCommandKey?: string;
@@ -75,6 +76,7 @@ export const preloadWorkersFromConfig = async (
       loadedRoles.push({
         agentId: worker.agentId,
         role: String(w.role),
+        isPm: w.isPm === true,
         focus: w.focus ? String(w.focus) : undefined,
         personality: w.personality ? String(w.personality) : undefined,
         verifyCommandKey: w.verifyCommandKey ? String(w.verifyCommandKey) : undefined,

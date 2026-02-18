@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { addActivityEvent, findTask } from "../libs/state";
+import { addActivityEvent, findTask, state } from "../libs/state";
 import { issueTaskId } from "../utils/idUtil";
 import { getIsoTime } from "../utils/timeUtil";
 
@@ -46,6 +46,25 @@ export const registerRejectTaskTool = (server: McpServer) =>
         action: "planning_reject_task",
         detail: `${taskId} rejected: ${reason.trim()}`,
       });
+
+      const relatedReviewTasks = state.tasks.filter(
+        (t) =>
+          t.taskType === "pm_review" &&
+          t.reviewTargetTaskId === taskId &&
+          (t.status === "todo" || t.status === "doing" || t.status === "wait_accept" || t.status === "blocked"),
+      );
+      for (const reviewTask of relatedReviewTasks) {
+        reviewTask.status = "done";
+        reviewTask.updatedAt = getIsoTime();
+        addActivityEvent({
+          id: issueTaskId("evt"),
+          timestamp: reviewTask.updatedAt,
+          type: "workflow",
+          action: "pm_review_closed",
+          detail: `${reviewTask.id} closed after reject ${taskId}`,
+          agentId: reviewTask.assignee,
+        });
+      }
 
       return {
         content: [{ type: "text", text: `Rejected: ${taskId}` }],

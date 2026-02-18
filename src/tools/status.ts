@@ -20,10 +20,17 @@ export const registerStatusTool = (server: McpServer) =>
         { todo: 0, doing: 0, wait_accept: 0, done: 0, blocked: 0 },
       );
 
+      const workflows = state.workflows.map((workflow) => ({
+        ...workflow,
+        tasks: state.tasks
+          .filter((task) => task.workflowId === workflow.id)
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+      }));
+
       const payload = {
         summary,
         tasks: state.tasks,
-        workflows: state.workflows,
+        workflows,
         agentRoles: state.agentRoles,
         activityTail: state.activityLog.slice(Math.max(0, state.activityLog.length - 50)),
         activityLogPath: activityLogFilePath,

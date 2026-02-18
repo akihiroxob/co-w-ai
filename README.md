@@ -44,6 +44,7 @@ Policy resolution order for verification commands:
   - enable: `COWAI_AUTO_EXECUTE=true`
   - interval ms: `COWAI_AUTO_EXECUTE_INTERVAL_MS` (default `5000`)
   - command timeout ms: `COWAI_AUTO_EXECUTE_TIMEOUT_MS` (default `1200000`)
+  - heartbeat interval ms: `COWAI_AUTO_EXECUTE_HEARTBEAT_INTERVAL_MS` (default `10000`)
   - optional verify after worker command: `COWAI_AUTO_VERIFY_ON_EXECUTE=true`
   - optional auto accept after submit: `COWAI_AUTO_ACCEPT_ON_EXECUTE=true`
   - requires worker command to support: `<codexCmd> exec "<prompt>" --skip-git-repo-check`
@@ -52,6 +53,10 @@ Policy resolution order for verification commands:
 - `todo` -> `doing` -> `wait_accept` -> `done`
 - `blocked` is used when execution/verification fails.
 - `rejectTask` puts task back to `todo` as rework-priority for the same assignee.
+- when an implementation task reaches `wait_accept`, orchestrator auto-queues a PM review task assigned to a planning/PM role from `settings/workers.yaml`.
+- PM assignee resolution uses `settings/workers.yaml` role profile:
+  - preferred: `isPm: true`
+  - fallback: role name matches `planning|pm|product manager`
 - development handoff:
   - `claimTask` (`todo` -> `doing`)
   - `submitTask` (`doing` -> `wait_accept`)
@@ -62,23 +67,16 @@ Policy resolution order for verification commands:
 - `wait_accept` is reviewed by PM/planning:
   - accept: `acceptTask` (`wait_accept` -> `done`)
   - reject: `rejectTask` (`wait_accept` -> `todo`)
+- PM review worker flow:
+  - PM review task must call `acceptTask` / `rejectTask` for the review target task.
+  - if PM review task ends without decision, review task moves to `blocked`.
 
 ## PM Gateway
 - Route all requests through `runStoryWorkflow` (PM/planning gateway).
 - By default, execution flags (`autoExecute`, `autoVerify`, `planningAutoAccept`, `baseBranch`) are disabled.
 - To enable execution flags, set `COWAI_ENABLE_WORKFLOW_EXECUTION=true` in the MCP server environment.
 - Use `activityLog` for execution monitoring.
-- You can reload worker/role settings without server restart via `reloadConfig`.
-
-## Reload Config
-- Tool: `reloadConfig`
-- Default behavior:
-  - reload workers from `settings/workers.yaml` (or `COWAI_WORKERS_FILE`)
-  - replace in-memory worker/role entries
-  - clear policy cache
-- Optional input:
-  - `workersFile`: alternate config path
-  - `resetWorkers` / `resetRoles` / `clearPolicyCache`
+- Use `reportProgress` for structured worker progress updates during long-running tasks.
 
 ## Environment Variables
 | Name | Purpose | Default | Notes |
@@ -90,6 +88,7 @@ Policy resolution order for verification commands:
 | `COWAI_AUTO_EXECUTE` | Enable automatic worker execution for `doing` tasks | `false` | Uses each worker's `codexCmd`. |
 | `COWAI_AUTO_EXECUTE_INTERVAL_MS` | Worker execution loop interval (ms) | `5000` | Invalid values fall back to default. |
 | `COWAI_AUTO_EXECUTE_TIMEOUT_MS` | Worker command timeout (ms) | `1200000` | Command is terminated on timeout. |
+| `COWAI_AUTO_EXECUTE_HEARTBEAT_INTERVAL_MS` | Worker execution heartbeat interval (ms) | `10000` | Adds `worker_execution_heartbeat` events while running. |
 | `COWAI_AUTO_VERIFY_ON_EXECUTE` | Run role verify command after worker execution | `false` | Requires `verifyCommandKey` and repo policy command. |
 | `COWAI_AUTO_ACCEPT_ON_EXECUTE` | Auto-accept after auto-submit | `false` | Skips manual PM acceptance. |
 | `COWAI_ENABLE_WORKFLOW_EXECUTION` | Enable execution flags in `runStoryWorkflow` (`autoExecute`, `autoVerify`, `planningAutoAccept`, `baseBranch`) | `false` | When disabled, `runStoryWorkflow` is planning-only. |

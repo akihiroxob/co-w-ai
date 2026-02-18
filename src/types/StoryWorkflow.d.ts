@@ -12,6 +12,7 @@ export type WorkflowStatus =
 export type AgentRoleProfile = {
   agentId: string;
   role: string;
+  isPm?: boolean;
   focus?: string;
   personality?: string;
   verifyCommandKey?: string;
@@ -41,7 +42,6 @@ export type StoryWorkflow = {
   createdAt: string;
   updatedAt: string;
   questions: StoryQuestion[];
-  tasks: WorkflowTask[];
   report?: string;
 };
 

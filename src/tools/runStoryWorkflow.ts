@@ -34,13 +34,19 @@ const toStateTask = (wfId: string, wt: WorkflowTask): Task => {
   const now = getIsoTime();
   return {
     id: wt.taskId,
+    workflowId: wfId,
     title: `[${wfId}] ${wt.title}`,
     description: wt.description,
     status: wt.status,
+    taskType: "implementation",
     assignee: wt.assignee,
     createdAt: now,
     updatedAt: now,
   };
+};
+
+const workflowTasksFromState = (workflowId: string) => {
+  return state.tasks.filter((t) => t.workflowId === workflowId);
 };
 
 export const registerRunStoryWorkflowTool = (server: McpServer) =>
@@ -108,7 +114,6 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
           createdAt: getIsoTime(),
           updatedAt: getIsoTime(),
           questions: buildClarifyingQuestions(story),
-          tasks: [],
         };
         state.workflows.push(workflow);
 
@@ -151,7 +156,11 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
         };
       }
 
-      if (workflow.tasks.length === 0) {
+      const existingWorkflowTasks = workflowTasksFromState(workflow.id);
+      const existingImplementationTasks = existingWorkflowTasks.filter(
+        (t) => t.taskType !== "pm_review",
+      );
+      if (existingImplementationTasks.length === 0) {
         const roles = Object.values(state.agentRoles);
 
         if (roles.length === 0) {
@@ -167,10 +176,10 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
           };
         }
 
-        workflow.tasks = buildWorkflowTasks(workflow.story, roles);
+        const plannedTasks = buildWorkflowTasks(workflow.story, roles);
         workflow.updatedAt = getIsoTime();
 
-        for (const task of workflow.tasks) {
+        for (const task of plannedTasks) {
           state.tasks.push(toStateTask(workflow.id, task));
         }
 
@@ -179,16 +188,18 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
           timestamp: getIsoTime(),
           type: "workflow",
           action: "tasks_decomposed",
-          detail: `Created ${workflow.tasks.length} task(s)`,
+          detail: `Created ${plannedTasks.length} task(s)`,
           workflowId: workflow.id,
         });
       }
 
+      const currentWorkflowTasks = workflowTasksFromState(workflow.id);
       if (autoExecute) {
         let claimedCount = 0;
-        for (const wt of workflow.tasks) {
-          if (!wt.assignee) continue;
-          const result = await claimTaskForAgent(wt.taskId, wt.assignee);
+        for (const task of currentWorkflowTasks) {
+          if (task.taskType === "pm_review") continue;
+          if (!task.assignee) continue;
+          const result = await claimTaskForAgent(task.id, task.assignee);
           if (result.ok) claimedCount += 1;
         }
         if (claimedCount > 0) {
@@ -204,7 +215,7 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
       }
 
       workflow.status = "ready";
-      workflow.report = `workflow=${workflow.id}; status=ready; tasks=${workflow.tasks.length}`;
+      workflow.report = `workflow=${workflow.id}; status=ready; tasks=${currentWorkflowTasks.length}`;
       workflow.updatedAt = getIsoTime();
 
       addActivityEvent({
@@ -223,7 +234,7 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
           workflowId: workflow.id,
           status: workflow.status,
           report: workflow.report,
-          tasks: workflow.tasks,
+          tasks: currentWorkflowTasks,
         },
       };
     },

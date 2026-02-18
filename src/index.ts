@@ -1,11 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { addActivityEvent } from "./libs/state";
+import { addActivityEvent, hydrateStateSnapshot } from "./libs/state";
 import { issueTaskId } from "./utils/idUtil";
 import { getIsoTime } from "./utils/timeUtil";
 import { preloadWorkersFromConfig } from "./utils/workerBootstrap";
 import { startAutoClaimLoop } from "./utils/autoClaimLoop";
 import { startWorkerExecutionLoop } from "./utils/workerExecutionLoop";
+import { stateSnapshotFilePath } from "./utils/statePersistence";
 
 // -------------------------
 // Server
@@ -25,7 +26,7 @@ import {
   registerSpawnWorkerTool,
   registerRunStoryWorkflowTool,
   registerActivityLogTool,
-  registerReloadConfigTool,
+  registerReportProgressTool,
 } from "./tools";
 
 registerPingTool(server);
@@ -37,7 +38,7 @@ registerRejectTaskTool(server);
 registerSpawnWorkerTool(server);
 registerRunStoryWorkflowTool(server);
 registerActivityLogTool(server);
-registerReloadConfigTool(server);
+registerReportProgressTool(server);
 
 async function preloadWorkers() {
   try {
@@ -62,6 +63,10 @@ async function preloadWorkers() {
 // -------------------------
 async function main() {
   console.error("MCP Orchestrator starting (stdio) ...");
+  const hydrated = await hydrateStateSnapshot();
+  if (hydrated) {
+    console.error(`State snapshot loaded: ${stateSnapshotFilePath}`);
+  }
   await preloadWorkers();
   const autoClaim = startAutoClaimLoop();
   if (autoClaim.enabled) {

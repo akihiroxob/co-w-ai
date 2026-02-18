@@ -7,7 +7,7 @@
     "build": "tsc && chmod 755 build/index.js",
     "debug": "npx @modelcontextprotocol/inspector node build/index.js",
     "start": "node build/index.js",
-    "test": "vitest run"
+    "test": "vitest run src/tests"
   },
   "keywords": [],
   "author": "",

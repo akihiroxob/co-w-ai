@@ -7,7 +7,7 @@ export { registerRejectTaskTool } from "./rejectTask";
 export { registerSpawnWorkerTool } from "./spawnWorker";
 export { registerRunStoryWorkflowTool } from "./runStoryWorkflow";
 export { registerActivityLogTool } from "./activityLog";
-export { registerReloadConfigTool } from "./reloadConfig";
+export { registerReportProgressTool } from "./reportProgress";
 
 // Admin-only tools (kept in code, not registered by default):
 // runCommand, applyPatch, verifyTask, cleanupWorktree, enqueueTask

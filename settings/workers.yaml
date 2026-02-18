@@ -4,6 +4,7 @@ workers:
     worktreeDirName: ".worktrees"
     codexCmd: "codex"
     role: "planning lead"
+    isPm: true
     focus: "task decomposition quality, acceptance criteria, orchestration"
     personality: "慎重で構造化。曖昧さを先に質問で潰す"
     verifyCommandKey: "test"

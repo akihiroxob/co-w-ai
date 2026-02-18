@@ -5,7 +5,7 @@ import { RepoPolicy } from "../types/RepoPolict";
 export const runShellCommand = async (
   command: string,
   cwd: string,
-  options?: { timeoutMs?: number },
+  options?: { timeoutMs?: number; env?: NodeJS.ProcessEnv },
 ): Promise<CommandResult> => {
   const startedAt = new Date();
   const startedAtIso = startedAt.toISOString();
@@ -15,7 +15,10 @@ export const runShellCommand = async (
       cwd,
       shell: true,
       stdio: ["ignore", "pipe", "pipe"],
-      env: process.env,
+      env: {
+        ...process.env,
+        ...(options?.env ?? {}),
+      },
     });
 
     let stdout = "";
@@ -66,7 +69,7 @@ export const runShellCommand = async (
 export const execCommandCapture = async function execCommandCapture(
   command: string,
   cwd: string,
-  options?: { timeoutMs?: number },
+  options?: { timeoutMs?: number; env?: NodeJS.ProcessEnv },
 ) {
   return await runShellCommand(command, cwd, options);
 };

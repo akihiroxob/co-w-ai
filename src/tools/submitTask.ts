@@ -5,6 +5,7 @@ import { workers } from "../libs/workers";
 import { issueTaskId } from "../utils/idUtil";
 import { getIsoTime } from "../utils/timeUtil";
 import { validateTaskWorktree } from "../utils/gitUtil";
+import { queuePmReviewTask } from "../utils/reviewTaskUtil";
 
 export const registerSubmitTaskTool = (server: McpServer) =>
   server.registerTool(
@@ -89,6 +90,7 @@ export const registerSubmitTaskTool = (server: McpServer) =>
         detail: `${taskId} submitted by ${agentId}${summary ? `: ${summary.trim()}` : ""}`,
         agentId,
       });
+      queuePmReviewTask(task);
 
       return {
         content: [{ type: "text", text: `Submitted: ${taskId}` }],

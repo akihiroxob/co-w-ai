@@ -5,6 +5,8 @@ import { getIsoTime } from "./timeUtil";
 import { execCommandCapture, resolveCommandFromPolicy } from "./shellUtil";
 import { loadRepoPolicy } from "./policyUtil";
 import { validateTaskWorktree } from "./gitUtil";
+import { queuePmReviewTask } from "./reviewTaskUtil";
+import path from "node:path";
 
 const parseBool = (v: string | undefined) => {
   if (!v) return false;
@@ -22,15 +24,46 @@ const shellQuote = (v: string) => {
   return `"${v.replace(/(["\\$`])/g, "\\$1")}"`;
 };
 
-const buildExecutionPrompt = (taskId: string, title: string, description?: string) => {
+const buildExecutionPrompt = (
+  taskId: string,
+  agentId: string,
+  title: string,
+  description?: string,
+) => {
   return [
     "You are a software worker agent running inside an assigned git worktree.",
     "Implement the requested task directly in the repository with minimal, safe changes.",
     "Run local checks as needed and keep the change scope focused.",
+    "If work takes longer than expected, call reportProgress(taskId, agentId, message) to post short status updates.",
     "",
     `Task ID: ${taskId}`,
+    `Agent ID: ${agentId}`,
     `Title: ${title}`,
     `Description: ${description ?? "(none)"}`,
+  ].join("\n");
+};
+
+const buildPmReviewPrompt = (
+  reviewTaskId: string,
+  agentId: string,
+  targetTaskId: string,
+  targetTitle: string,
+  targetDescription?: string,
+) => {
+  return [
+    "You are a PM/planning worker agent.",
+    "Do not implement code in this task.",
+    "Review the target task result and make a decision.",
+    "You must call one of these tools against the target task:",
+    "- acceptTask(taskId=targetTaskId)",
+    "- rejectTask(taskId=targetTaskId, reason=clear reason)",
+    "If you reject, reason must be concrete and actionable.",
+    "",
+    `Review Task ID: ${reviewTaskId}`,
+    `Agent ID: ${agentId}`,
+    `Target Task ID: ${targetTaskId}`,
+    `Target Title: ${targetTitle}`,
+    `Target Description: ${targetDescription ?? "(none)"}`,
   ].join("\n");
 };
 
@@ -61,6 +94,10 @@ export const startWorkerExecutionLoop = () => {
 
   const intervalMs = parsePositiveInt(process.env.COWAI_AUTO_EXECUTE_INTERVAL_MS, 5000);
   const commandTimeoutMs = parsePositiveInt(process.env.COWAI_AUTO_EXECUTE_TIMEOUT_MS, 20 * 60 * 1000);
+  const heartbeatIntervalMs = parsePositiveInt(
+    process.env.COWAI_AUTO_EXECUTE_HEARTBEAT_INTERVAL_MS,
+    10000,
+  );
   const autoVerify = parseBool(process.env.COWAI_AUTO_VERIFY_ON_EXECUTE);
   const autoAccept = parseBool(process.env.COWAI_AUTO_ACCEPT_ON_EXECUTE);
   const inFlightByTask = new Set<string>();
@@ -91,11 +128,48 @@ export const startWorkerExecutionLoop = () => {
       agentId: task.assignee,
     });
 
-    const prompt = buildExecutionPrompt(task.id, task.title, task.description);
+    const reviewTarget =
+      task.taskType === "pm_review" && task.reviewTargetTaskId
+        ? state.tasks.find((t) => t.id === task.reviewTargetTaskId)
+        : undefined;
+    const prompt =
+      task.taskType === "pm_review" && task.reviewTargetTaskId
+        ? buildPmReviewPrompt(
+            task.id,
+            task.assignee,
+            task.reviewTargetTaskId,
+            reviewTarget?.title ?? "(target not found)",
+            reviewTarget?.description,
+          )
+        : buildExecutionPrompt(task.id, task.assignee, task.title, task.description);
     const command = `${worker.codexCmd} exec ${shellQuote(prompt)} --skip-git-repo-check`;
-    const run = await execCommandCapture(command, worktree.worktreePath, {
-      timeoutMs: commandTimeoutMs,
-    });
+    const executionStartedAtMs = Date.now();
+    const heartbeatTimer = setInterval(() => {
+      const elapsedMs = Date.now() - executionStartedAtMs;
+      addActivityEvent({
+        id: issueTaskId("evt"),
+        timestamp: getIsoTime(),
+        type: "agent",
+        action: "worker_execution_heartbeat",
+        detail: `${task.id} running elapsedMs=${elapsedMs}`,
+        agentId: task.assignee,
+      });
+    }, heartbeatIntervalMs);
+
+    const run = await (async () => {
+      try {
+        return await execCommandCapture(command, worktree.worktreePath, {
+          timeoutMs: commandTimeoutMs,
+          env: {
+            COWAI_WORKERS_FILE: path.join(worker.repoPath, "settings", "workers.yaml"),
+            COWAI_ACTIVITY_LOG_FILE: path.join(worker.repoPath, "logs", "activity.ndjson"),
+            COWAI_STATE_FILE: path.join(worker.repoPath, "logs", "state.json"),
+          },
+        });
+      } finally {
+        clearInterval(heartbeatTimer);
+      }
+    })();
     state.lastCommand = run;
 
     if (!run.ok) {
@@ -119,6 +193,41 @@ export const startWorkerExecutionLoop = () => {
       detail: `${task.id} command completed`,
       agentId: task.assignee,
     });
+
+    if (task.taskType === "pm_review") {
+      const targetTask = task.reviewTargetTaskId
+        ? state.tasks.find((t) => t.id === task.reviewTargetTaskId)
+        : undefined;
+      if (!targetTask) {
+        markTaskBlocked(task.id, "review target not found", task.assignee);
+        return;
+      }
+
+      if (targetTask.status === "wait_accept") {
+        markTaskBlocked(task.id, "review decision missing (target still wait_accept)", task.assignee);
+        addActivityEvent({
+          id: issueTaskId("evt"),
+          timestamp: getIsoTime(),
+          type: "workflow",
+          action: "pm_review_missing_decision",
+          detail: `${task.id} did not finalize ${targetTask.id}`,
+          agentId: task.assignee,
+        });
+        return;
+      }
+
+      task.status = "done";
+      task.updatedAt = getIsoTime();
+      addActivityEvent({
+        id: issueTaskId("evt"),
+        timestamp: task.updatedAt,
+        type: "workflow",
+        action: "pm_review_completed",
+        detail: `${task.id} completed decision for ${targetTask.id}`,
+        agentId: task.assignee,
+      });
+      return;
+    }
 
     if (autoVerify) {
       const role = state.agentRoles[task.assignee];
@@ -178,6 +287,9 @@ export const startWorkerExecutionLoop = () => {
       detail: `${task.id} auto-submitted by ${task.assignee}`,
       agentId: task.assignee,
     });
+    if (!autoAccept) {
+      queuePmReviewTask(task);
+    }
 
     if (autoAccept) {
       task.status = "done";
@@ -221,7 +333,7 @@ export const startWorkerExecutionLoop = () => {
     timestamp: getIsoTime(),
     type: "system",
     action: "worker_execution_loop_started",
-    detail: `intervalMs=${intervalMs}, timeoutMs=${commandTimeoutMs}, autoVerify=${autoVerify}, autoAccept=${autoAccept}`,
+    detail: `intervalMs=${intervalMs}, timeoutMs=${commandTimeoutMs}, heartbeatIntervalMs=${heartbeatIntervalMs}, autoVerify=${autoVerify}, autoAccept=${autoAccept}`,
   });
 
   return {
