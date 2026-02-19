@@ -47,6 +47,8 @@ Policy resolution order for verification commands:
   - heartbeat interval ms: `COWAI_AUTO_EXECUTE_HEARTBEAT_INTERVAL_MS` (default `10000`)
   - optional verify after worker command: `COWAI_AUTO_VERIFY_ON_EXECUTE=true`
   - optional auto accept after submit: `COWAI_AUTO_ACCEPT_ON_EXECUTE=true`
+  - optional auto integration to target branch when accepted: `COWAI_AUTO_INTEGRATE_ON_ACCEPT=true`
+  - target branch for auto integration: `COWAI_INTEGRATION_TARGET_BRANCH` (default: `main`)
   - requires worker command to support: `<codexCmd> exec "<prompt>" --skip-git-repo-check`
 
 ## Task Status
@@ -91,6 +93,8 @@ Policy resolution order for verification commands:
 | `COWAI_AUTO_EXECUTE_HEARTBEAT_INTERVAL_MS` | Worker execution heartbeat interval (ms) | `10000` | Adds `worker_execution_heartbeat` events while running. |
 | `COWAI_AUTO_VERIFY_ON_EXECUTE` | Run role verify command after worker execution | `false` | Requires `verifyCommandKey` and repo policy command. |
 | `COWAI_AUTO_ACCEPT_ON_EXECUTE` | Auto-accept after auto-submit | `false` | Skips manual PM acceptance. |
+| `COWAI_AUTO_INTEGRATE_ON_ACCEPT` | Auto integrate accepted implementation task changes into target branch | `false` | Requires clean target branch checkout and task worktree availability. |
+| `COWAI_INTEGRATION_TARGET_BRANCH` | Branch name for auto integration | `main` | Integration runs via `git cherry-pick` in worker repo root. |
 | `COWAI_ENABLE_WORKFLOW_EXECUTION` | Enable execution flags in `runStoryWorkflow` (`autoExecute`, `autoVerify`, `planningAutoAccept`, `baseBranch`) | `false` | When disabled, `runStoryWorkflow` is planning-only. |
 
 ## Planning Bridge Flow

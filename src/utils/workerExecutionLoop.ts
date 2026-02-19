@@ -6,6 +6,7 @@ import { execCommandCapture, resolveCommandFromPolicy } from "./shellUtil";
 import { loadRepoPolicy } from "./policyUtil";
 import { validateTaskWorktree } from "./gitUtil";
 import { queuePmReviewTask } from "./reviewTaskUtil";
+import { acceptTaskWithPolicy } from "./acceptTaskUtil";
 import path from "node:path";
 
 const parseBool = (v: string | undefined) => {
@@ -292,16 +293,27 @@ export const startWorkerExecutionLoop = () => {
     }
 
     if (autoAccept) {
-      task.status = "done";
-      task.updatedAt = getIsoTime();
-      addActivityEvent({
-        id: issueTaskId("evt"),
-        timestamp: task.updatedAt,
-        type: "workflow",
-        action: "planning_accept_task",
-        detail: `${task.id} auto-accepted`,
-        agentId: task.assignee,
-      });
+      const accepted = await acceptTaskWithPolicy(task.id);
+      if (!accepted.ok) {
+        markTaskBlocked(task.id, `auto-accept failed: ${accepted.error}`, task.assignee);
+        addActivityEvent({
+          id: issueTaskId("evt"),
+          timestamp: getIsoTime(),
+          type: "workflow",
+          action: "task_auto_accept_failed",
+          detail: `${task.id} auto-accept failed: ${accepted.error}`,
+          agentId: task.assignee,
+        });
+      } else {
+        addActivityEvent({
+          id: issueTaskId("evt"),
+          timestamp: getIsoTime(),
+          type: "workflow",
+          action: "planning_accept_task",
+          detail: `${task.id} auto-accepted`,
+          agentId: task.assignee,
+        });
+      }
     }
   };
 
