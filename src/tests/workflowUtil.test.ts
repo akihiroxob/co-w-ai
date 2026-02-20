@@ -21,6 +21,14 @@ describe("workflowUtil", () => {
 
       expect(questions).toEqual([]);
     });
+
+    it("returns remaining questions when only acceptance cue exists", () => {
+      const questions = buildClarifyingQuestions("受け入れ条件だけを先に決める");
+
+      expect(questions).toHaveLength(2);
+      expect(questions[0]?.question).toContain("対象外スコープ");
+      expect(questions[1]?.question).toContain("技術的制約");
+    });
   });
 
   describe("buildWorkflowTasks", () => {

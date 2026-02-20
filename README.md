@@ -52,26 +52,35 @@ Policy resolution order for verification commands:
   - requires worker command to support: `<codexCmd> exec "<prompt>" --skip-git-repo-check`
 
 ## Task Status
-- `todo` -> `doing` -> `wait_accept` -> `done`
-- `blocked` is used when execution/verification fails.
-- `rejectTask` puts task back to `todo` as rework-priority for the same assignee.
-- when an implementation task reaches `wait_accept`, orchestrator auto-queues a PM review task assigned to a planning/PM role from `settings/workers.yaml`.
+- `todo` -> `doing` -> `in_review` -> `wait_accept` -> `accepted` -> `done`
+- `rejectTask` moves a task to `rejected` with reason and rework metadata.
+- `rejected` tasks are rework-priority and can be reclaimed (`rejected` -> `doing`).
+- when an implementation task reaches `in_review`, orchestrator auto-queues a TechLead review task.
+- when a task is accepted in `in_review`, it moves to `wait_accept` and PM review is queued.
+- when a task is accepted in `wait_accept`, it moves to `accepted` and TechLead merge task is queued.
 - PM assignee resolution uses `settings/workers.yaml` role profile:
   - preferred: `isPm: true`
   - fallback: role name matches `planning|pm|product manager`
+- TechLead assignee resolution uses role name match: `tech lead|techlead|architect|tl`.
 - development handoff:
   - `claimTask` (`todo` -> `doing`)
-  - `submitTask` (`doing` -> `wait_accept`)
+  - `submitTask` (`doing` -> `in_review`)
 - worktree enforcement is built into the same flow:
   - `claimTask` auto-prepares task worktree/branch for the assignee
   - `submitTask` is rejected if the expected task worktree is missing or inconsistent
-- once submitted (`wait_accept`), worker can move to other tasks without waiting for PM acceptance.
-- `wait_accept` is reviewed by PM/planning:
-  - accept: `acceptTask` (`wait_accept` -> `done`)
-  - reject: `rejectTask` (`wait_accept` -> `todo`)
-- PM review worker flow:
-  - PM review task must call `acceptTask` / `rejectTask` for the review target task.
-  - if PM review task ends without decision, review task moves to `blocked`.
+- once submitted (`in_review`), worker can move to other tasks without waiting for reviewer acceptance.
+- `in_review` is reviewed by TechLead (quality):
+  - accept: `acceptTask` (`in_review` -> `wait_accept`)
+  - reject: `rejectTask` (`in_review` -> `rejected`)
+- `wait_accept` is reviewed by PM/planning (acceptance criteria):
+  - accept: `acceptTask` (`wait_accept` -> `accepted`)
+  - reject: `rejectTask` (`wait_accept` -> `rejected`)
+- `accepted` is finalized by TechLead merge:
+  - accept: `acceptTask` (`accepted` -> `done`)
+  - reject: `rejectTask` (`accepted` -> `rejected`)
+- review worker flow:
+  - review task must call `acceptTask` / `rejectTask` for the review target task.
+  - if review ends without decision, target task is auto-rejected with reason.
 
 ## PM Gateway
 - Route all requests through `runStoryWorkflow` (PM/planning gateway).
@@ -84,7 +93,7 @@ Policy resolution order for verification commands:
 | Name | Purpose | Default | Notes |
 | --- | --- | --- | --- |
 | `COWAI_WORKERS_FILE` | Override workers config path | `<cwd>/settings/workers.yaml`, then repo fallback | Relative path is resolved from current working directory. |
-| `COWAI_AUTO_CLAIM` | Enable automatic `todo` -> `doing` claiming loop | `false` | Truthy values: `1`, `true`, `yes`, `on`. |
+| `COWAI_AUTO_CLAIM` | Enable automatic `todo/rejected` -> `doing` claiming loop | `false` | Truthy values: `1`, `true`, `yes`, `on`. |
 | `COWAI_AUTO_CLAIM_INTERVAL_MS` | Auto-claim loop interval (ms) | `5000` | Invalid values fall back to default. |
 | `COWAI_AUTO_CLAIM_MAX_DOING_PER_AGENT` | Max concurrent `doing` tasks per agent in auto-claim loop | `1` | Invalid values fall back to default. |
 | `COWAI_AUTO_EXECUTE` | Enable automatic worker execution for `doing` tasks | `false` | Uses each worker's `codexCmd`. |
@@ -104,16 +113,20 @@ Policy resolution order for verification commands:
 4. Human answers via Codex; Codex calls `runStoryWorkflow` again with `answers`.
 5. Tasks are decomposed into backlog (`todo`).
 6. Development claims/executes backlog tasks (`claimTask`) and submits to review (`submitTask`).
-7. PM reviews each task:
+7. TechLead reviews quality in `in_review`, then PM reviews acceptance criteria in `wait_accept`.
+8. TechLead merges `accepted` tasks into target branch.
+9. Reviewers finalize each task:
    - `acceptTask` for completion
    - `rejectTask` to send back for rework
-8. Human accepts story outcome; if insufficient, submits follow-up story.
+10. Human accepts story outcome; if insufficient, submits follow-up story.
 
 ## Worker Quick Steps
-1. Worker claims a `todo` task with `claimTask` and starts implementation.
+1. Worker claims a `todo`/`rejected` task with `claimTask` and starts implementation.
 2. Worker implements changes in the assigned task scope and validates locally as needed.
-3. Worker sends the handoff with `submitTask` (`doing` -> `wait_accept`).
-4. PM reviews and finalizes with `acceptTask` (`wait_accept` -> `done`).
+3. Worker sends the handoff with `submitTask` (`doing` -> `in_review`).
+4. TechLead reviews quality and accepts (`in_review` -> `wait_accept`) or rejects (`-> rejected`).
+5. PM reviews acceptance criteria and accepts (`wait_accept` -> `accepted`) or rejects (`-> rejected`).
+6. TechLead merges accepted task (`accepted` -> `done`).
 
 ## Multi-Terminal Monitoring
 - Terminal A: submit stories/tasks (`runStoryWorkflow`).

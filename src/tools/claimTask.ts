@@ -7,7 +7,7 @@ export const registerClaimTaskTool = (server: McpServer) =>
     "claimTask",
     {
       title: "claimTask",
-      description: "Developer claims a backlog task (todo -> doing).",
+      description: "Developer claims a backlog task (todo/rejected -> doing).",
       inputSchema: {
         taskId: z.string().min(1),
         agentId: z.string().min(1),
@@ -26,7 +26,7 @@ export const registerClaimTaskTool = (server: McpServer) =>
 
         if (result.error === "INVALID_STATE") {
           return {
-            content: [{ type: "text", text: `Task is not todo: ${taskId}` }],
+            content: [{ type: "text", text: `Task is not todo/rejected: ${taskId}` }],
             structuredContent: { ok: false, error: "INVALID_STATE", taskId, status: result.status },
             isError: true,
           };

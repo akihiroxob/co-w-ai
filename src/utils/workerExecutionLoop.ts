@@ -5,7 +5,7 @@ import { getIsoTime } from "./timeUtil";
 import { execCommandCapture, resolveCommandFromPolicy } from "./shellUtil";
 import { loadRepoPolicy } from "./policyUtil";
 import { validateTaskWorktree } from "./gitUtil";
-import { queuePmReviewTask } from "./reviewTaskUtil";
+import { queueTlReviewTask } from "./reviewTaskUtil";
 import { acceptTaskWithPolicy } from "./acceptTaskUtil";
 import path from "node:path";
 
@@ -44,16 +44,26 @@ const buildExecutionPrompt = (
   ].join("\n");
 };
 
-const buildPmReviewPrompt = (
+const buildReviewPrompt = (
+  reviewType: "tl_review" | "pm_review" | "tl_merge",
   reviewTaskId: string,
   agentId: string,
   targetTaskId: string,
   targetTitle: string,
   targetDescription?: string,
 ) => {
+  const perspective =
+    reviewType === "tl_review"
+      ? "Check code quality, correctness, maintainability, and risk."
+      : reviewType === "pm_review"
+        ? "Check acceptance criteria fulfillment only."
+        : "Finalize merge readiness and execute final integration decision.";
   return [
-    "You are a PM/planning worker agent.",
+    reviewType === "tl_review" || reviewType === "tl_merge"
+      ? "You are a TechLead reviewer agent."
+      : "You are a PM/planning reviewer agent.",
     "Do not implement code in this task.",
+    perspective,
     "Review the target task result and make a decision.",
     "You must call one of these tools against the target task:",
     "- acceptTask(taskId=targetTaskId)",
@@ -68,19 +78,21 @@ const buildPmReviewPrompt = (
   ].join("\n");
 };
 
-const markTaskBlocked = (taskId: string, reason: string, agentId: string) => {
+const markTaskRejected = (taskId: string, reason: string, agentId: string) => {
   const task = state.tasks.find((t) => t.id === taskId);
   if (!task) return;
-  task.status = "blocked";
+  task.status = "rejected";
+  task.reworkRequested = task.taskType === "implementation";
   task.updatedAt = getIsoTime();
   task.reworkReason = reason;
+  task.reworkCount = (task.reworkCount ?? 0) + 1;
 
   addActivityEvent({
     id: issueTaskId("evt"),
     timestamp: task.updatedAt,
     type: "workflow",
-    action: "task_blocked",
-    detail: `${task.id} blocked: ${reason}`,
+    action: "task_rejected",
+    detail: `${task.id} rejected: ${reason}`,
     agentId,
   });
 };
@@ -110,13 +122,13 @@ export const startWorkerExecutionLoop = () => {
 
     const worker = workers.get(task.assignee);
     if (!worker) {
-      markTaskBlocked(task.id, "worker not found", task.assignee);
+      markTaskRejected(task.id, "worker not found", task.assignee);
       return;
     }
 
     const worktree = await validateTaskWorktree(worker, task.assignee, task.id);
     if (!worktree.ok) {
-      markTaskBlocked(task.id, `worktree invalid: ${worktree.error}`, task.assignee);
+      markTaskRejected(task.id, `worktree invalid: ${worktree.error}`, task.assignee);
       return;
     }
 
@@ -130,12 +142,15 @@ export const startWorkerExecutionLoop = () => {
     });
 
     const reviewTarget =
-      task.taskType === "pm_review" && task.reviewTargetTaskId
+      (task.taskType === "tl_review" || task.taskType === "pm_review" || task.taskType === "tl_merge") &&
+      task.reviewTargetTaskId
         ? state.tasks.find((t) => t.id === task.reviewTargetTaskId)
         : undefined;
     const prompt =
-      task.taskType === "pm_review" && task.reviewTargetTaskId
-        ? buildPmReviewPrompt(
+      (task.taskType === "tl_review" || task.taskType === "pm_review" || task.taskType === "tl_merge") &&
+      task.reviewTargetTaskId
+        ? buildReviewPrompt(
+            task.taskType as "tl_review" | "pm_review" | "tl_merge",
             task.id,
             task.assignee,
             task.reviewTargetTaskId,
@@ -174,7 +189,7 @@ export const startWorkerExecutionLoop = () => {
     state.lastCommand = run;
 
     if (!run.ok) {
-      markTaskBlocked(task.id, "worker command failed", task.assignee);
+      markTaskRejected(task.id, "worker command failed", task.assignee);
       addActivityEvent({
         id: issueTaskId("evt"),
         timestamp: getIsoTime(),
@@ -195,26 +210,34 @@ export const startWorkerExecutionLoop = () => {
       agentId: task.assignee,
     });
 
-    if (task.taskType === "pm_review") {
+    if (task.taskType === "tl_review" || task.taskType === "pm_review" || task.taskType === "tl_merge") {
       const targetTask = task.reviewTargetTaskId
         ? state.tasks.find((t) => t.id === task.reviewTargetTaskId)
         : undefined;
       if (!targetTask) {
-        markTaskBlocked(task.id, "review target not found", task.assignee);
+        markTaskRejected(task.id, "review target not found", task.assignee);
         return;
       }
 
-      if (targetTask.status === "wait_accept") {
-        markTaskBlocked(task.id, "review decision missing (target still wait_accept)", task.assignee);
+      const missingDecision =
+        (task.taskType === "tl_review" && targetTask.status === "in_review") ||
+        (task.taskType === "pm_review" && targetTask.status === "wait_accept") ||
+        (task.taskType === "tl_merge" && targetTask.status === "accepted");
+
+      if (missingDecision) {
+        targetTask.status = "rejected";
+        targetTask.reworkRequested = true;
+        targetTask.reworkReason = `review decision missing by ${task.id}`;
+        targetTask.reworkCount = (targetTask.reworkCount ?? 0) + 1;
+        targetTask.updatedAt = getIsoTime();
         addActivityEvent({
           id: issueTaskId("evt"),
           timestamp: getIsoTime(),
           type: "workflow",
-          action: "pm_review_missing_decision",
-          detail: `${task.id} did not finalize ${targetTask.id}`,
+          action: "planning_reject_task",
+          detail: `${targetTask.id} rejected: review decision missing by ${task.id}`,
           agentId: task.assignee,
         });
-        return;
       }
 
       task.status = "done";
@@ -223,7 +246,12 @@ export const startWorkerExecutionLoop = () => {
         id: issueTaskId("evt"),
         timestamp: task.updatedAt,
         type: "workflow",
-        action: "pm_review_completed",
+        action:
+          task.taskType === "tl_review"
+            ? "tl_review_completed"
+            : task.taskType === "pm_review"
+              ? "pm_review_completed"
+              : "tl_merge_completed",
         detail: `${task.id} completed decision for ${targetTask.id}`,
         agentId: task.assignee,
       });
@@ -234,7 +262,7 @@ export const startWorkerExecutionLoop = () => {
       const role = state.agentRoles[task.assignee];
       const commandKey = role?.verifyCommandKey;
       if (!commandKey) {
-        markTaskBlocked(task.id, "verify command key not found", task.assignee);
+        markTaskRejected(task.id, "verify command key not found", task.assignee);
         return;
       }
 
@@ -243,7 +271,7 @@ export const startWorkerExecutionLoop = () => {
         const policy = await loadRepoPolicy(worker.repoPath);
         resolved = resolveCommandFromPolicy(policy, commandKey);
       } catch (e: any) {
-        markTaskBlocked(task.id, `verify setup failed: ${String(e?.message ?? e)}`, task.assignee);
+        markTaskRejected(task.id, `verify setup failed: ${String(e?.message ?? e)}`, task.assignee);
         return;
       }
 
@@ -253,7 +281,7 @@ export const startWorkerExecutionLoop = () => {
       state.lastCommand = verify;
 
       if (!verify.ok) {
-        markTaskBlocked(task.id, `verify failed: ${commandKey}`, task.assignee);
+        markTaskRejected(task.id, `verify failed: ${commandKey}`, task.assignee);
         addActivityEvent({
           id: issueTaskId("evt"),
           timestamp: getIsoTime(),
@@ -275,7 +303,7 @@ export const startWorkerExecutionLoop = () => {
       });
     }
 
-    task.status = "wait_accept";
+    task.status = "in_review";
     task.reworkRequested = false;
     task.reworkReason = undefined;
     task.updatedAt = getIsoTime();
@@ -289,30 +317,56 @@ export const startWorkerExecutionLoop = () => {
       agentId: task.assignee,
     });
     if (!autoAccept) {
-      queuePmReviewTask(task);
+      queueTlReviewTask(task);
     }
 
     if (autoAccept) {
-      const accepted = await acceptTaskWithPolicy(task.id);
-      if (!accepted.ok) {
-        markTaskBlocked(task.id, `auto-accept failed: ${accepted.error}`, task.assignee);
+      const tlAccepted = await acceptTaskWithPolicy(task.id);
+      if (!tlAccepted.ok) {
+        markTaskRejected(task.id, `auto-accept failed: ${tlAccepted.error}`, task.assignee);
         addActivityEvent({
           id: issueTaskId("evt"),
           timestamp: getIsoTime(),
           type: "workflow",
           action: "task_auto_accept_failed",
-          detail: `${task.id} auto-accept failed: ${accepted.error}`,
+          detail: `${task.id} auto-accept failed: ${tlAccepted.error}`,
           agentId: task.assignee,
         });
       } else {
-        addActivityEvent({
-          id: issueTaskId("evt"),
-          timestamp: getIsoTime(),
-          type: "workflow",
-          action: "planning_accept_task",
-          detail: `${task.id} auto-accepted`,
-          agentId: task.assignee,
-        });
+        const pmAccepted = await acceptTaskWithPolicy(task.id);
+        if (!pmAccepted.ok) {
+          markTaskRejected(task.id, `auto-accept failed: ${pmAccepted.error}`, task.assignee);
+          addActivityEvent({
+            id: issueTaskId("evt"),
+            timestamp: getIsoTime(),
+            type: "workflow",
+            action: "task_auto_accept_failed",
+            detail: `${task.id} auto-accept failed: ${pmAccepted.error}`,
+            agentId: task.assignee,
+          });
+        } else {
+          const merged = await acceptTaskWithPolicy(task.id);
+          if (!merged.ok) {
+            markTaskRejected(task.id, `auto-accept failed: ${merged.error}`, task.assignee);
+            addActivityEvent({
+              id: issueTaskId("evt"),
+              timestamp: getIsoTime(),
+              type: "workflow",
+              action: "task_auto_accept_failed",
+              detail: `${task.id} auto-accept failed: ${merged.error}`,
+              agentId: task.assignee,
+            });
+          } else {
+            addActivityEvent({
+              id: issueTaskId("evt"),
+              timestamp: getIsoTime(),
+              type: "workflow",
+              action: "planning_accept_task",
+              detail: `${task.id} auto-accepted`,
+              agentId: task.assignee,
+            });
+          }
+        }
       }
     }
   };

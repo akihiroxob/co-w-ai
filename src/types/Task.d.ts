@@ -1,5 +1,12 @@
-export type TaskStatus = "todo" | "doing" | "wait_accept" | "done" | "blocked";
-export type TaskType = "implementation" | "pm_review";
+export type TaskStatus =
+  | "todo"
+  | "doing"
+  | "in_review"
+  | "wait_accept"
+  | "accepted"
+  | "done"
+  | "rejected";
+export type TaskType = "implementation" | "tl_review" | "pm_review" | "tl_merge";
 export type Task = {
   id: string;
   workflowId?: string;

@@ -4,6 +4,7 @@ import { issueTaskId } from "./idUtil";
 import { getIsoTime } from "./timeUtil";
 import { execCommandCapture } from "./shellUtil";
 import { validateTaskWorktree } from "./gitUtil";
+import { queuePmReviewTask, queueTlMergeTask } from "./reviewTaskUtil";
 import type { Task } from "../types/Task";
 
 type AcceptTaskResult =
@@ -37,19 +38,14 @@ type IntegrationResult =
       commit: string;
     };
 
-const parseBool = (v: string | undefined) => {
-  if (!v) return false;
-  return ["1", "true", "yes", "on"].includes(v.toLowerCase());
-};
-
 const shellQuote = (v: string) => `"${v.replace(/(["\\$`])/g, "\\$1")}"`;
 
-const closeRelatedReviewTasks = (taskId: string) => {
+const closeRelatedReviewTasks = (taskId: string, reviewTypes: Task["taskType"][]) => {
   const relatedReviewTasks = state.tasks.filter(
     (t) =>
-      t.taskType === "pm_review" &&
+      reviewTypes.includes(t.taskType) &&
       t.reviewTargetTaskId === taskId &&
-      (t.status === "todo" || t.status === "doing" || t.status === "wait_accept" || t.status === "blocked"),
+      (t.status === "todo" || t.status === "doing"),
   );
   for (const reviewTask of relatedReviewTasks) {
     reviewTask.status = "done";
@@ -58,7 +54,7 @@ const closeRelatedReviewTasks = (taskId: string) => {
       id: issueTaskId("evt"),
       timestamp: reviewTask.updatedAt,
       type: "workflow",
-      action: "pm_review_closed",
+      action: "review_closed",
       detail: `${reviewTask.id} closed after accept ${taskId}`,
       agentId: reviewTask.assignee,
     });
@@ -68,7 +64,7 @@ const closeRelatedReviewTasks = (taskId: string) => {
 const integrateAcceptedTask = async (task: Task) => {
   const targetBranch = process.env.COWAI_INTEGRATION_TARGET_BRANCH?.trim() || "main";
 
-  if (task.taskType === "pm_review") {
+  if (task.taskType === "pm_review" || task.taskType === "tl_review") {
     return { ok: true as const, status: "already_applied" as const, targetBranch, commit: "" };
   }
 
@@ -185,41 +181,70 @@ export const acceptTaskWithPolicy = async (taskId: string): Promise<AcceptTaskRe
     return { ok: false, error: "TASK_NOT_FOUND", taskId };
   }
 
-  if (task.status !== "wait_accept") {
+  if (task.status !== "in_review" && task.status !== "wait_accept" && task.status !== "accepted") {
     return { ok: false, error: "INVALID_STATE", taskId, status: task.status };
   }
 
-  const autoIntegrate = parseBool(process.env.COWAI_AUTO_INTEGRATE_ON_ACCEPT);
-  let integration: IntegrationResult = {
-    enabled: false,
-    status: "skipped",
-  };
+  if (task.status === "in_review") {
+    task.status = "wait_accept";
+    task.updatedAt = getIsoTime();
+    addActivityEvent({
+      id: issueTaskId("evt"),
+      timestamp: task.updatedAt,
+      type: "workflow",
+      action: "techlead_accept_task",
+      detail: `${taskId} accepted in in_review -> wait_accept`,
+    });
+    closeRelatedReviewTasks(taskId, ["tl_review"]);
+    queuePmReviewTask(task);
+    return {
+      ok: true,
+      task,
+      integration: {
+        enabled: false,
+        status: "skipped",
+      },
+    };
+  }
 
-  if (autoIntegrate) {
-    const integrated = await integrateAcceptedTask(task);
-    if (!integrated.ok) {
-      addActivityEvent({
-        id: issueTaskId("evt"),
-        timestamp: getIsoTime(),
-        type: "workflow",
-        action: "task_auto_integrate_failed",
-        detail: `${taskId} failed: ${integrated.reason}`,
-        agentId: task.assignee,
-      });
-      return {
-        ok: false,
-        error: "AUTO_INTEGRATE_FAILED",
-        taskId,
-        reason: integrated.reason,
-        detail: integrated.detail,
-      };
-    }
+  if (task.status === "wait_accept") {
+    task.status = "accepted";
+    task.updatedAt = getIsoTime();
+    addActivityEvent({
+      id: issueTaskId("evt"),
+      timestamp: task.updatedAt,
+      type: "workflow",
+      action: "planning_accept_task",
+      detail: `${taskId} accepted in wait_accept -> accepted`,
+    });
+    closeRelatedReviewTasks(taskId, ["pm_review"]);
+    queueTlMergeTask(task);
+    return {
+      ok: true,
+      task,
+      integration: {
+        enabled: false,
+        status: "skipped",
+      },
+    };
+  }
 
-    integration = {
-      enabled: true,
-      status: integrated.status,
-      targetBranch: integrated.targetBranch,
-      commit: integrated.commit,
+  const integrated = await integrateAcceptedTask(task);
+  if (!integrated.ok) {
+    addActivityEvent({
+      id: issueTaskId("evt"),
+      timestamp: getIsoTime(),
+      type: "workflow",
+      action: "task_auto_integrate_failed",
+      detail: `${taskId} failed: ${integrated.reason}`,
+      agentId: task.assignee,
+    });
+    return {
+      ok: false,
+      error: "AUTO_INTEGRATE_FAILED",
+      taskId,
+      reason: integrated.reason,
+      detail: integrated.detail,
     };
   }
 
@@ -229,10 +254,19 @@ export const acceptTaskWithPolicy = async (taskId: string): Promise<AcceptTaskRe
     id: issueTaskId("evt"),
     timestamp: task.updatedAt,
     type: "workflow",
-    action: "planning_accept_task",
-    detail: `${taskId} accepted`,
+    action: "task_done",
+    detail: `${taskId} accepted -> merged -> done`,
   });
 
-  closeRelatedReviewTasks(taskId);
-  return { ok: true, task, integration };
+  closeRelatedReviewTasks(taskId, ["tl_merge"]);
+  return {
+    ok: true,
+    task,
+    integration: {
+      enabled: true,
+      status: integrated.status,
+      targetBranch: integrated.targetBranch,
+      commit: integrated.commit,
+    },
+  };
 };

@@ -1,5 +1,5 @@
 workers:
-  - agentId: "W1"
+  - agentId: "PM001"
     repoPath: "."
     worktreeDirName: ".worktrees"
     codexCmd: "codex"
@@ -9,7 +9,7 @@ workers:
     personality: "慎重で構造化。曖昧さを先に質問で潰す"
     verifyCommandKey: "test"
 
-  - agentId: "W2"
+  - agentId: "DEV001"
     repoPath: "."
     worktreeDirName: ".worktrees"
     codexCmd: "codex"
@@ -18,7 +18,7 @@ workers:
     personality: "堅実で再現性重視。小さく確実に進める"
     verifyCommandKey: "test"
 
-  - agentId: "W3"
+  - agentId: "DEV002"
     repoPath: "."
     worktreeDirName: ".worktrees"
     codexCmd: "codex"
@@ -27,11 +27,20 @@ workers:
     personality: "ユーザー視点でわかりやすさを優先"
     verifyCommandKey: "lint"
 
-  - agentId: "W4"
+  - agentId: "QA001"
     repoPath: "."
     worktreeDirName: ".worktrees"
     codexCmd: "codex"
     role: "qa verifier"
     focus: "regression checks, failure paths, release safety"
     personality: "批判的思考で抜け漏れを検出"
+    verifyCommandKey: "test"
+
+  - agentId: "TL001"
+    repoPath: "."
+    worktreeDirName: ".worktrees"
+    codexCmd: "codex"
+    role: "tech lead"
+    focus: "integration strategy, release guardrails, merge risk reduction"
+    personality: "全体最適で判断し、統合時の安全性を最優先する"
     verifyCommandKey: "test"

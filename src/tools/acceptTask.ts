@@ -7,7 +7,8 @@ export const registerAcceptTaskTool = (server: McpServer) =>
     "acceptTask",
     {
       title: "acceptTask",
-      description: "Planning acceptance step: move task from wait_accept to done.",
+      description:
+        "Review acceptance step: in_review -> wait_accept (TL), wait_accept -> accepted (PM), accepted -> done (TL merge).",
       inputSchema: {
         taskId: z.string().min(1),
       },
@@ -25,7 +26,7 @@ export const registerAcceptTaskTool = (server: McpServer) =>
 
         if (result.error === "INVALID_STATE") {
           return {
-            content: [{ type: "text", text: `Task is not wait_accept: ${taskId}` }],
+            content: [{ type: "text", text: `Task is not in_review/wait_accept/accepted: ${taskId}` }],
             structuredContent: { ok: false, error: "INVALID_STATE", taskId, status: result.status },
             isError: true,
           };

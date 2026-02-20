@@ -18,9 +18,13 @@ const parsePositiveInt = (v: string | undefined, fallback: number) => {
 
 const pickNextTask = (agentId: string) => {
   const rework = state.tasks.find(
-    (t) => t.status === "todo" && t.assignee === agentId && t.reworkRequested === true,
+    (t) => t.status === "rejected" && t.assignee === agentId && t.reworkRequested === true,
   );
   if (rework) return rework;
+  const legacyRework = state.tasks.find(
+    (t) => t.status === "todo" && t.assignee === agentId && t.reworkRequested === true,
+  );
+  if (legacyRework) return legacyRework;
   return state.tasks.find((t) => t.status === "todo" && t.assignee === agentId);
 };
 

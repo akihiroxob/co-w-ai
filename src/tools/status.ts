@@ -17,7 +17,7 @@ export const registerStatusTool = (server: McpServer) =>
           acc[t.status] = (acc[t.status] ?? 0) + 1;
           return acc;
         },
-        { todo: 0, doing: 0, wait_accept: 0, done: 0, blocked: 0 },
+        { todo: 0, doing: 0, in_review: 0, wait_accept: 0, accepted: 0, done: 0, rejected: 0 },
       );
 
       const workflows = state.workflows.map((workflow) => ({

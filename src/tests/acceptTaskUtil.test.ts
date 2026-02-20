@@ -40,8 +40,14 @@ describe("acceptTaskWithPolicy", () => {
     workers.clear();
   });
 
-  it("accepts wait_accept task and closes related PM review tasks", async () => {
+  it("accepts wait_accept task and moves it to accepted with TL merge queued", async () => {
     const now = new Date().toISOString();
+    state.agentRoles = {
+      TL001: {
+        agentId: "TL001",
+        role: "tech lead",
+      },
+    };
     state.tasks.push(
       {
         id: "task_1",
@@ -68,18 +74,69 @@ describe("acceptTaskWithPolicy", () => {
     if (!result.ok) return;
 
     expect(result.integration.enabled).toBe(false);
-    expect(state.tasks.find((t) => t.id === "task_1")?.status).toBe("done");
+    expect(state.tasks.find((t) => t.id === "task_1")?.status).toBe("accepted");
     expect(state.tasks.find((t) => t.id === "review_1")?.status).toBe("done");
+    expect(
+      state.tasks.some(
+        (t) => t.taskType === "tl_merge" && t.reviewTargetTaskId === "task_1" && t.assignee === "TL001",
+      ),
+    ).toBe(true);
   });
 
-  it("keeps task wait_accept when auto integration fails", async () => {
-    process.env.COWAI_AUTO_INTEGRATE_ON_ACCEPT = "true";
+  it("accepts in_review task and moves it to wait_accept with PM review queued", async () => {
+    const now = new Date().toISOString();
+    state.agentRoles = {
+      PM001: {
+        agentId: "PM001",
+        role: "planning lead",
+        isPm: true,
+      },
+    };
+    state.tasks.push(
+      {
+        id: "task_in_review_1",
+        title: "impl",
+        status: "in_review",
+        assignee: "W2",
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "review_tl_1",
+        title: "tl review",
+        status: "doing",
+        taskType: "tl_review",
+        reviewTargetTaskId: "task_in_review_1",
+        assignee: "TL001",
+        createdAt: now,
+        updatedAt: now,
+      },
+    );
+
+    const result = await acceptTaskWithPolicy("task_in_review_1");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.integration.enabled).toBe(false);
+    expect(state.tasks.find((t) => t.id === "task_in_review_1")?.status).toBe("wait_accept");
+    expect(state.tasks.find((t) => t.id === "review_tl_1")?.status).toBe("done");
+    expect(
+      state.tasks.some(
+        (t) =>
+          t.taskType === "pm_review" &&
+          t.reviewTargetTaskId === "task_in_review_1" &&
+          t.assignee === "PM001",
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps task accepted when final integration fails", async () => {
     const now = new Date().toISOString();
 
     state.tasks.push({
       id: "task_2",
       title: "impl",
-      status: "wait_accept",
+      status: "accepted",
       assignee: "W2",
       createdAt: now,
       updatedAt: now,
@@ -107,18 +164,17 @@ describe("acceptTaskWithPolicy", () => {
     if (result.ok) return;
 
     expect(result.error).toBe("AUTO_INTEGRATE_FAILED");
-    expect(state.tasks.find((t) => t.id === "task_2")?.status).toBe("wait_accept");
+    expect(state.tasks.find((t) => t.id === "task_2")?.status).toBe("accepted");
     expect(state.activityLog.some((e) => e.action === "task_auto_integrate_failed")).toBe(true);
   });
 
-  it("auto integrates accepted task into main branch when enabled", async () => {
-    process.env.COWAI_AUTO_INTEGRATE_ON_ACCEPT = "true";
+  it("integrates accepted task into main branch and marks it done", async () => {
     const now = new Date().toISOString();
 
     state.tasks.push({
       id: "task_3",
       title: "impl",
-      status: "wait_accept",
+      status: "accepted",
       assignee: "W2",
       createdAt: now,
       updatedAt: now,

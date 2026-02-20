@@ -39,7 +39,7 @@ export const claimTaskForAgent = async (taskId: string, agentId: string): Promis
     return { ok: false, error: "TASK_NOT_FOUND", taskId, agentId };
   }
 
-  if (task.status !== "todo") {
+  if (task.status !== "todo" && task.status !== "rejected") {
     return { ok: false, error: "INVALID_STATE", taskId, agentId, status: task.status };
   }
 
@@ -57,7 +57,7 @@ export const claimTaskForAgent = async (taskId: string, agentId: string): Promis
   const prioritizedReworkTask = state.tasks.find(
     (t) =>
       t.id !== taskId &&
-      t.status === "todo" &&
+      (t.status === "rejected" || t.status === "todo") &&
       t.assignee === agentId &&
       t.reworkRequested === true,
   );
@@ -90,6 +90,7 @@ export const claimTaskForAgent = async (taskId: string, agentId: string): Promis
 
   task.assignee = agentId;
   task.status = "doing";
+  task.reworkRequested = false;
   task.updatedAt = getIsoTime();
 
   addActivityEvent({

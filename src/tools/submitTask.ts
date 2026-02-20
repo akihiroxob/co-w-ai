@@ -5,14 +5,14 @@ import { workers } from "../libs/workers";
 import { issueTaskId } from "../utils/idUtil";
 import { getIsoTime } from "../utils/timeUtil";
 import { validateTaskWorktree } from "../utils/gitUtil";
-import { queuePmReviewTask } from "../utils/reviewTaskUtil";
+import { queueTlReviewTask } from "../utils/reviewTaskUtil";
 
 export const registerSubmitTaskTool = (server: McpServer) =>
   server.registerTool(
     "submitTask",
     {
       title: "submitTask",
-      description: "Developer submits completed work for PM review (doing -> wait_accept).",
+      description: "Developer submits completed work for TechLead review (doing -> in_review).",
       inputSchema: {
         taskId: z.string().min(1),
         agentId: z.string().min(1),
@@ -77,7 +77,7 @@ export const registerSubmitTaskTool = (server: McpServer) =>
       }
 
       task.assignee = agentId;
-      task.status = "wait_accept";
+      task.status = "in_review";
       task.reworkRequested = false;
       task.reworkReason = undefined;
       task.updatedAt = getIsoTime();
@@ -90,7 +90,7 @@ export const registerSubmitTaskTool = (server: McpServer) =>
         detail: `${taskId} submitted by ${agentId}${summary ? `: ${summary.trim()}` : ""}`,
         agentId,
       });
-      queuePmReviewTask(task);
+      queueTlReviewTask(task);
 
       return {
         content: [{ type: "text", text: `Submitted: ${taskId}` }],

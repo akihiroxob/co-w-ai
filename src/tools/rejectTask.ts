@@ -9,7 +9,7 @@ export const registerRejectTaskTool = (server: McpServer) =>
     "rejectTask",
     {
       title: "rejectTask",
-      description: "Planning rejection step: move task from wait_accept back to todo.",
+      description: "Review rejection step: move task from in_review/wait_accept/accepted to rejected.",
       inputSchema: {
         taskId: z.string().min(1),
         reason: z.string().min(1),
@@ -25,15 +25,15 @@ export const registerRejectTaskTool = (server: McpServer) =>
         };
       }
 
-      if (task.status !== "wait_accept") {
+      if (task.status !== "in_review" && task.status !== "wait_accept" && task.status !== "accepted") {
         return {
-          content: [{ type: "text", text: `Task is not wait_accept: ${taskId}` }],
+          content: [{ type: "text", text: `Task is not in_review/wait_accept/accepted: ${taskId}` }],
           structuredContent: { ok: false, error: "INVALID_STATE", taskId, status: task.status },
           isError: true,
         };
       }
 
-      task.status = "todo";
+      task.status = "rejected";
       task.reworkRequested = true;
       task.reworkReason = reason.trim();
       task.reworkCount = (task.reworkCount ?? 0) + 1;
@@ -49,9 +49,9 @@ export const registerRejectTaskTool = (server: McpServer) =>
 
       const relatedReviewTasks = state.tasks.filter(
         (t) =>
-          t.taskType === "pm_review" &&
+          (t.taskType === "tl_review" || t.taskType === "pm_review" || t.taskType === "tl_merge") &&
           t.reviewTargetTaskId === taskId &&
-          (t.status === "todo" || t.status === "doing" || t.status === "wait_accept" || t.status === "blocked"),
+          (t.status === "todo" || t.status === "doing"),
       );
       for (const reviewTask of relatedReviewTasks) {
         reviewTask.status = "done";
@@ -60,7 +60,7 @@ export const registerRejectTaskTool = (server: McpServer) =>
           id: issueTaskId("evt"),
           timestamp: reviewTask.updatedAt,
           type: "workflow",
-          action: "pm_review_closed",
+          action: "review_closed",
           detail: `${reviewTask.id} closed after reject ${taskId}`,
           agentId: reviewTask.assignee,
         });
