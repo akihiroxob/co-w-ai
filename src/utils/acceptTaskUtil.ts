@@ -1,10 +1,9 @@
-import { addActivityEvent, findTask, state } from "../libs/state";
+import { addActivityEvent, findTask } from "../libs/state";
 import { workers } from "../libs/workers";
 import { issueTaskId } from "./idUtil";
 import { getIsoTime } from "./timeUtil";
 import { execCommandCapture } from "./shellUtil";
 import { validateTaskWorktree } from "./gitUtil";
-import { queuePmReviewTask, queueTlMergeTask } from "./reviewTaskUtil";
 import type { Task } from "../types/Task";
 
 type AcceptTaskResult =
@@ -40,33 +39,8 @@ type IntegrationResult =
 
 const shellQuote = (v: string) => `"${v.replace(/(["\\$`])/g, "\\$1")}"`;
 
-const closeRelatedReviewTasks = (taskId: string, reviewTypes: Task["taskType"][]) => {
-  const relatedReviewTasks = state.tasks.filter(
-    (t) =>
-      reviewTypes.includes(t.taskType) &&
-      t.reviewTargetTaskId === taskId &&
-      (t.status === "todo" || t.status === "doing"),
-  );
-  for (const reviewTask of relatedReviewTasks) {
-    reviewTask.status = "done";
-    reviewTask.updatedAt = getIsoTime();
-    addActivityEvent({
-      id: issueTaskId("evt"),
-      timestamp: reviewTask.updatedAt,
-      type: "workflow",
-      action: "review_closed",
-      detail: `${reviewTask.id} closed after accept ${taskId}`,
-      agentId: reviewTask.assignee,
-    });
-  }
-};
-
 const integrateAcceptedTask = async (task: Task) => {
   const targetBranch = process.env.COWAI_INTEGRATION_TARGET_BRANCH?.trim() || "main";
-
-  if (task.taskType === "pm_review" || task.taskType === "tl_review") {
-    return { ok: true as const, status: "already_applied" as const, targetBranch, commit: "" };
-  }
 
   if (!task.assignee) {
     return {
@@ -195,8 +169,6 @@ export const acceptTaskWithPolicy = async (taskId: string): Promise<AcceptTaskRe
       action: "techlead_accept_task",
       detail: `${taskId} accepted in in_review -> wait_accept`,
     });
-    closeRelatedReviewTasks(taskId, ["tl_review"]);
-    queuePmReviewTask(task);
     return {
       ok: true,
       task,
@@ -217,8 +189,6 @@ export const acceptTaskWithPolicy = async (taskId: string): Promise<AcceptTaskRe
       action: "planning_accept_task",
       detail: `${taskId} accepted in wait_accept -> accepted`,
     });
-    closeRelatedReviewTasks(taskId, ["pm_review"]);
-    queueTlMergeTask(task);
     return {
       ok: true,
       task,
@@ -257,8 +227,6 @@ export const acceptTaskWithPolicy = async (taskId: string): Promise<AcceptTaskRe
     action: "task_done",
     detail: `${taskId} accepted -> merged -> done`,
   });
-
-  closeRelatedReviewTasks(taskId, ["tl_merge"]);
   return {
     ok: true,
     task,

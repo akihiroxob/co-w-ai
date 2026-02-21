@@ -55,9 +55,7 @@ Policy resolution order for verification commands:
 - `todo` -> `doing` -> `in_review` -> `wait_accept` -> `accepted` -> `done`
 - `rejectTask` moves a task to `rejected` with reason and rework metadata.
 - `rejected` tasks are rework-priority and can be reclaimed (`rejected` -> `doing`).
-- when an implementation task reaches `in_review`, orchestrator auto-queues a TechLead review task.
-- when a task is accepted in `in_review`, it moves to `wait_accept` and PM review is queued.
-- when a task is accepted in `wait_accept`, it moves to `accepted` and TechLead merge task is queued.
+- reviews are status-driven on the same implementation task (no separate review tasks).
 - PM assignee resolution uses `settings/workers.yaml` role profile:
   - preferred: `isPm: true`
   - fallback: role name matches `planning|pm|product manager`
@@ -79,8 +77,8 @@ Policy resolution order for verification commands:
   - accept: `acceptTask` (`accepted` -> `done`)
   - reject: `rejectTask` (`accepted` -> `rejected`)
 - review worker flow:
-  - review task must call `acceptTask` / `rejectTask` for the review target task.
-  - if review ends without decision, target task is auto-rejected with reason.
+  - reviewer must call `acceptTask` / `rejectTask` on the same task.
+  - if review ends without decision, task is auto-rejected with reason.
 
 ## PM Gateway
 - Route all requests through `runStoryWorkflow` (PM/planning gateway).

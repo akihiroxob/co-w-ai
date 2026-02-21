@@ -38,7 +38,6 @@ const toStateTask = (wfId: string, wt: WorkflowTask): Task => {
     title: `[${wfId}] ${wt.title}`,
     description: wt.description,
     status: wt.status,
-    taskType: "implementation",
     assignee: wt.assignee,
     createdAt: now,
     updatedAt: now,
@@ -157,9 +156,7 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
       }
 
       const existingWorkflowTasks = workflowTasksFromState(workflow.id);
-      const existingImplementationTasks = existingWorkflowTasks.filter(
-        (t) => (t.taskType ?? "implementation") === "implementation",
-      );
+      const existingImplementationTasks = existingWorkflowTasks;
       if (existingImplementationTasks.length === 0) {
         const roles = Object.values(state.agentRoles);
 
@@ -197,7 +194,6 @@ export const registerRunStoryWorkflowTool = (server: McpServer) =>
       if (autoExecute) {
         let claimedCount = 0;
         for (const task of currentWorkflowTasks) {
-          if ((task.taskType ?? "implementation") !== "implementation") continue;
           if (!task.assignee) continue;
           const result = await claimTaskForAgent(task.id, task.assignee);
           if (result.ok) claimedCount += 1;
