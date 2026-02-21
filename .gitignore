@@ -3,3 +3,4 @@ node_modules
 prev
 .DS_Store
 .worktrees
+logs
