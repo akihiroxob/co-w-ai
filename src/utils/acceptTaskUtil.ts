@@ -3,7 +3,7 @@ import { workers } from "../libs/workers";
 import { issueTaskId } from "./idUtil";
 import { getIsoTime } from "./timeUtil";
 import { execCommandCapture } from "./shellUtil";
-import { validateTaskWorktree } from "./gitUtil";
+import { cleanupTaskWorktree, validateTaskWorktree } from "./gitUtil";
 import type { Task } from "../types/Task";
 
 type AcceptTaskResult =
@@ -227,6 +227,24 @@ export const acceptTaskWithPolicy = async (taskId: string): Promise<AcceptTaskRe
     action: "task_done",
     detail: `${taskId} accepted -> merged -> done`,
   });
+
+  if (task.assignee) {
+    const worker = workers.get(task.assignee);
+    if (worker) {
+      const cleanup = await cleanupTaskWorktree(worker, task.assignee, task.id);
+      addActivityEvent({
+        id: issueTaskId("evt"),
+        timestamp: getIsoTime(),
+        type: "workflow",
+        action: cleanup.ok ? "task_worktree_cleaned" : "task_worktree_cleanup_failed",
+        detail: cleanup.ok
+          ? `${task.id} worktree cleaned (branchState=${cleanup.branchState})`
+          : `${task.id} worktree cleanup failed: ${cleanup.reason}`,
+        agentId: task.assignee,
+      });
+    }
+  }
+
   return {
     ok: true,
     task,

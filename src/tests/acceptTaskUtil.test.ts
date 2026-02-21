@@ -143,6 +143,13 @@ describe("acceptTaskWithPolicy", () => {
       branch: "agent/W2/task_3",
       worktreePath: "/tmp/repo/.worktrees/W2__task_3",
     });
+    const cleanupSpy = vi.spyOn(gitUtil, "cleanupTaskWorktree").mockResolvedValue({
+      ok: true,
+      worktreePath: "/tmp/repo/.worktrees/W2__task_3",
+      branch: "agent/W2/task_3",
+      branchDeleted: true,
+      branchState: "deleted",
+    });
 
     vi.spyOn(shellUtil, "execCommandCapture")
       .mockResolvedValueOnce(
@@ -163,6 +170,17 @@ describe("acceptTaskWithPolicy", () => {
     expect(result.integration.enabled).toBe(true);
     expect(result.integration.status).toBe("applied");
     expect(state.tasks.find((t) => t.id === "task_3")?.status).toBe("done");
+    expect(cleanupSpy).toHaveBeenCalledWith(
+      {
+        agentId: "W2",
+        repoPath: "/tmp/repo",
+        worktreeRoot: "/tmp/repo/.worktrees",
+        codexCmd: "codex",
+      },
+      "W2",
+      "task_3",
+    );
     expect(state.activityLog.some((e) => e.action === "task_auto_integrated")).toBe(true);
+    expect(state.activityLog.some((e) => e.action === "task_worktree_cleaned")).toBe(true);
   });
 });

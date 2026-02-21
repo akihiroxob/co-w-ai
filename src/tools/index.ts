@@ -5,7 +5,7 @@ export { registerSubmitTaskTool } from "./submitTask";
 export { registerAcceptTaskTool } from "./acceptTask";
 export { registerRejectTaskTool } from "./rejectTask";
 export { registerSpawnWorkerTool } from "./spawnWorker";
-export { registerRunStoryWorkflowTool } from "./runStoryWorkflow";
+export { registerRequestStoryWorkflowTool } from "./requestStoryWorkflow";
 export { registerActivityLogTool } from "./activityLog";
 export { registerReportProgressTool } from "./reportProgress";
 

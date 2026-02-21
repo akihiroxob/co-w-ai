@@ -3,7 +3,7 @@
 Story-driven multi-agent orchestrator for collaborative development via MCP tools.
 
 ## Architecture
-- Human <-> Codex (MCP client) <-> Planning flow (`runStoryWorkflow`) -> Worker agents
+- Human <-> Codex (MCP client) <-> Planning flow (`requestStoryWorkflow`) -> Worker agents
 - Worker + role/personality settings are unified in `settings/workers.yaml`.
 
 ## Build & Run
@@ -47,7 +47,6 @@ Policy resolution order for verification commands:
   - heartbeat interval ms: `COWAI_AUTO_EXECUTE_HEARTBEAT_INTERVAL_MS` (default `10000`)
   - optional verify after worker command: `COWAI_AUTO_VERIFY_ON_EXECUTE=true`
   - optional auto accept after submit: `COWAI_AUTO_ACCEPT_ON_EXECUTE=true`
-  - optional auto integration to target branch when accepted: `COWAI_AUTO_INTEGRATE_ON_ACCEPT=true`
   - target branch for auto integration: `COWAI_INTEGRATION_TARGET_BRANCH` (default: `main`)
   - requires worker command to support: `<codexCmd> exec "<prompt>" --skip-git-repo-check`
 
@@ -81,7 +80,7 @@ Policy resolution order for verification commands:
   - if review ends without decision, task is auto-rejected with reason.
 
 ## PM Gateway
-- Route all requests through `runStoryWorkflow` (PM/planning gateway).
+- Route all requests through `requestStoryWorkflow` (PM/planning gateway).
 - By default, execution flags (`autoExecute`, `autoVerify`, `planningAutoAccept`, `baseBranch`) are disabled.
 - To enable execution flags, set `COWAI_ENABLE_WORKFLOW_EXECUTION=true` in the MCP server environment.
 - Use `activityLog` for execution monitoring.
@@ -100,15 +99,14 @@ Policy resolution order for verification commands:
 | `COWAI_AUTO_EXECUTE_HEARTBEAT_INTERVAL_MS` | Worker execution heartbeat interval (ms) | `10000` | Adds `worker_execution_heartbeat` events while running. |
 | `COWAI_AUTO_VERIFY_ON_EXECUTE` | Run role verify command after worker execution | `false` | Requires `verifyCommandKey` and repo policy command. |
 | `COWAI_AUTO_ACCEPT_ON_EXECUTE` | Auto-accept after auto-submit | `false` | Skips manual PM acceptance. |
-| `COWAI_AUTO_INTEGRATE_ON_ACCEPT` | Auto integrate accepted implementation task changes into target branch | `false` | Requires clean target branch checkout and task worktree availability. |
 | `COWAI_INTEGRATION_TARGET_BRANCH` | Branch name for auto integration | `main` | Integration runs via `git cherry-pick` in worker repo root. |
-| `COWAI_ENABLE_WORKFLOW_EXECUTION` | Enable execution flags in `runStoryWorkflow` (`autoExecute`, `autoVerify`, `planningAutoAccept`, `baseBranch`) | `false` | When disabled, `runStoryWorkflow` is planning-only. |
+| `COWAI_ENABLE_WORKFLOW_EXECUTION` | Enable execution flags in `requestStoryWorkflow` (`autoExecute`, `autoVerify`, `planningAutoAccept`, `baseBranch`) | `false` | When disabled, `requestStoryWorkflow` is planning-only. |
 
 ## Planning Bridge Flow
 1. Human sends story via Codex.
-2. Codex calls `runStoryWorkflow`.
+2. Codex calls `requestStoryWorkflow`.
 3. Planning phase returns clarification questions.
-4. Human answers via Codex; Codex calls `runStoryWorkflow` again with `answers`.
+4. Human answers via Codex; Codex calls `requestStoryWorkflow` again with `answers`.
 5. Tasks are decomposed into backlog (`todo`).
 6. Development claims/executes backlog tasks (`claimTask`) and submits to review (`submitTask`).
 7. TechLead reviews quality in `in_review`, then PM reviews acceptance criteria in `wait_accept`.
@@ -127,7 +125,7 @@ Policy resolution order for verification commands:
 6. TechLead merges accepted task (`accepted` -> `done`).
 
 ## Multi-Terminal Monitoring
-- Terminal A: submit stories/tasks (`runStoryWorkflow`).
+- Terminal A: submit stories/tasks (`requestStoryWorkflow`).
 - Terminal B: monitor `activityLog` and `status`.
 - Terminal C: inspect worktree diffs and apply patches.
 

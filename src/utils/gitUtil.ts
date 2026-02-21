@@ -124,6 +124,56 @@ export const ensureTaskWorktree = async (worker: Worker, agentId: string, taskId
   return await validateTaskWorktree(worker, agentId, taskId);
 };
 
+export const cleanupTaskWorktree = async (worker: Worker, agentId: string, taskId: string) => {
+  const worktreePath = worktreePathFor(worker, agentId, taskId);
+  const branch = taskBranchName(agentId, taskId);
+
+  const remove = await execCommandCapture(`git worktree remove --force ${shellQuote(worktreePath)}`, worker.repoPath);
+  if (!remove.ok) {
+    return {
+      ok: false as const,
+      reason: "WORKTREE_REMOVE_FAILED",
+      worktreePath,
+      branch,
+      detail: remove,
+    };
+  }
+
+  const branchExists = await execCommandCapture(
+    `git show-ref --verify --quiet ${shellQuote(`refs/heads/${branch}`)}`,
+    worker.repoPath,
+  );
+
+  if (!branchExists.ok) {
+    return {
+      ok: true as const,
+      worktreePath,
+      branch,
+      branchDeleted: false,
+      branchState: "absent" as const,
+    };
+  }
+
+  const branchDelete = await execCommandCapture(`git branch -D ${shellQuote(branch)}`, worker.repoPath);
+  if (!branchDelete.ok) {
+    return {
+      ok: false as const,
+      reason: "BRANCH_DELETE_FAILED",
+      worktreePath,
+      branch,
+      detail: branchDelete,
+    };
+  }
+
+  return {
+    ok: true as const,
+    worktreePath,
+    branch,
+    branchDeleted: true,
+    branchState: "deleted" as const,
+  };
+};
+
 function isSubPath(parent: string, child: string) {
   const rel = path.relative(parent, child);
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));

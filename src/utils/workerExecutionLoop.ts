@@ -27,6 +27,15 @@ const shellQuote = (v: string) => {
 };
 
 const buildExecutionPrompt = (task: Task, agentId: string) => {
+  const reworkSection = task.reworkReason
+    ? [
+        "",
+        "Rework Request:",
+        `- Previous review rejected this task with reason: ${task.reworkReason}`,
+        "- Address this reason first before adding any extra changes.",
+      ]
+    : [];
+
   return [
     "You are a software worker agent running inside an assigned git worktree.",
     "Implement the requested task directly in the repository with minimal, safe changes.",
@@ -37,6 +46,7 @@ const buildExecutionPrompt = (task: Task, agentId: string) => {
     `Agent ID: ${agentId}`,
     `Title: ${task.title}`,
     `Description: ${task.description ?? "(none)"}`,
+    ...reworkSection,
   ].join("\n");
 };
 
@@ -53,10 +63,11 @@ const buildReviewPrompt = (task: Task, agentId: string, stage: "in_review" | "wa
     "Do not implement code in this task.",
     perspective,
     "Review the target task result and make a decision.",
-    "You must call one of these tools against the target task:",
+    "You must call exactly one of these tools against the target task:",
     "- acceptTask(taskId=targetTaskId)",
     "- rejectTask(taskId=targetTaskId, reason=clear reason)",
     "If you reject, reason must be concrete and actionable.",
+    "If you do not call one tool, this review is treated as invalid.",
     "",
     `Review Stage: ${stage}`,
     `Agent ID: ${agentId}`,
@@ -65,6 +76,24 @@ const buildReviewPrompt = (task: Task, agentId: string, stage: "in_review" | "wa
     `Target Description: ${task.description ?? "(none)"}`,
   ].join("\n");
 };
+
+const buildDecisionRetryPrompt = (
+  task: Task,
+  agentId: string,
+  stage: "in_review" | "wait_accept" | "accepted",
+) =>
+  [
+    stage === "wait_accept" ? "You are a PM/planning reviewer agent." : "You are a TechLead reviewer agent.",
+    "Mandatory correction:",
+    "You must immediately call exactly one tool now:",
+    "- acceptTask(taskId=targetTaskId)",
+    "- rejectTask(taskId=targetTaskId, reason=clear reason)",
+    "Do not run shell commands. Do not provide analysis without calling a tool.",
+    "",
+    `Review Stage: ${stage}`,
+    `Agent ID: ${agentId}`,
+    `Target Task ID: ${task.id}`,
+  ].join("\n");
 
 const markTaskRejected = (task: Task, reason: string, agentId: string) => {
   task.status = "rejected";
@@ -289,6 +318,35 @@ export const startWorkerExecutionLoop = () => {
     }
 
     if (task.status === stage) {
+      if (stage !== "in_review" && stage !== "wait_accept" && stage !== "accepted") {
+        markTaskRejected(task, `invalid review stage for decision retry: ${stage}`, agentId);
+        return;
+      }
+
+      const retryPrompt = buildDecisionRetryPrompt(task, agentId, stage);
+      const retryCommand = `${actorWorker.codexCmd} exec ${shellQuote(retryPrompt)} --skip-git-repo-check`;
+      const retry = await execCommandCapture(retryCommand, worktree.worktreePath, {
+        timeoutMs: commandTimeoutMs,
+        env: {
+          COWAI_WORKERS_FILE: path.join(actorWorker.repoPath, "settings", "workers.yaml"),
+          COWAI_ACTIVITY_LOG_FILE: path.join(actorWorker.repoPath, "logs", "activity.ndjson"),
+          COWAI_STATE_FILE: path.join(actorWorker.repoPath, "logs", "state.json"),
+        },
+      });
+      state.lastCommand = retry;
+
+      if (task.status !== stage) {
+        addActivityEvent({
+          id: issueTaskId("evt"),
+          timestamp: getIsoTime(),
+          type: "workflow",
+          action: "review_stage_completed_after_retry",
+          detail: `${task.id} moved ${stage} -> ${task.status} after forced retry`,
+          agentId,
+        });
+        return;
+      }
+
       markTaskRejected(task, `review decision missing at ${stage}`, agentId);
       addActivityEvent({
         id: issueTaskId("evt"),

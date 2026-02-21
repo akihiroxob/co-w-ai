@@ -24,7 +24,7 @@ import {
   registerAcceptTaskTool,
   registerRejectTaskTool,
   registerSpawnWorkerTool,
-  registerRunStoryWorkflowTool,
+  registerRequestStoryWorkflowTool,
   registerActivityLogTool,
   registerReportProgressTool,
 } from "./tools";
@@ -36,7 +36,7 @@ registerSubmitTaskTool(server);
 registerAcceptTaskTool(server);
 registerRejectTaskTool(server);
 registerSpawnWorkerTool(server);
-registerRunStoryWorkflowTool(server);
+registerRequestStoryWorkflowTool(server);
 registerActivityLogTool(server);
 registerReportProgressTool(server);
 

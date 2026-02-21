@@ -2,12 +2,9 @@ import { CommandResult } from "./CommandResult";
 import { TaskStatus } from "./Task";
 
 export type WorkflowStatus =
-  | "awaiting_user"
-  | "ready"
-  | "executing"
-  | "verified"
-  | "reported"
-  | "blocked";
+  | "planning"
+  | "active"
+  | "done";
 
 export type AgentRoleProfile = {
   agentId: string;
