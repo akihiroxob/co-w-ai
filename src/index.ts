@@ -19,24 +19,24 @@ const server = new McpServer({ name: "orchestrator", version: "0.5.2" });
 import {
   registerPingTool,
   registerStatusTool,
+  registerRequestStoryWorkflowTool,
   registerClaimTaskTool,
   registerSubmitTaskTool,
   registerAcceptTaskTool,
   registerRejectTaskTool,
   registerSpawnWorkerTool,
-  registerRequestStoryWorkflowTool,
   registerActivityLogTool,
   registerReportProgressTool,
 } from "./tools";
 
 registerPingTool(server);
 registerStatusTool(server);
+registerRequestStoryWorkflowTool(server);
 registerClaimTaskTool(server);
 registerSubmitTaskTool(server);
 registerAcceptTaskTool(server);
 registerRejectTaskTool(server);
 registerSpawnWorkerTool(server);
-registerRequestStoryWorkflowTool(server);
 registerActivityLogTool(server);
 registerReportProgressTool(server);
 
