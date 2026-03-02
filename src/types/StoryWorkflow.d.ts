@@ -43,14 +43,20 @@ export type StoryWorkflow = {
 };
 
 export type ActivityEventType = "workflow" | "agent" | "system";
+export type ActivityEventKind = "message" | "tool" | "error" | "result" | "progress";
 
 export type ActivityEvent = {
   id: string;
+  ts?: string;
   timestamp: string;
   type: ActivityEventType;
   action: string;
   detail: string;
   workflowId?: string;
+  taskId?: string;
   agentId?: string;
   runId?: string;
+  kind?: ActivityEventKind;
+  title?: string;
+  rawEvent?: unknown;
 };

@@ -16,6 +16,13 @@ export type Task = {
   reworkRequested?: boolean;
   reworkReason?: string;
   reworkCount?: number;
+  reject?: {
+    kind: "quality" | "spec";
+    reason: string;
+    next: string[];
+    rejectedAt: string;
+    rejectedBy?: string;
+  };
   createdAt: string;
   updatedAt: string;
 };

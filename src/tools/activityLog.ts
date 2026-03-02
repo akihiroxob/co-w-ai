@@ -10,6 +10,7 @@ export const registerActivityLogTool = (server: McpServer) =>
       description: "Inspect agent/system activity logs.",
       inputSchema: {
         workflowId: z.string().optional(),
+        taskId: z.string().optional(),
         agentId: z.string().optional(),
         runId: z.string().optional(),
         type: z.enum(["workflow", "agent", "system"]).optional(),
@@ -19,11 +20,14 @@ export const registerActivityLogTool = (server: McpServer) =>
         limit: z.number().int().min(1).max(500).default(50),
       },
     },
-    async ({ workflowId, agentId, runId, type, action, contains, format, limit }) => {
+    async ({ workflowId, taskId, agentId, runId, type, action, contains, format, limit }) => {
       let events = state.activityLog;
 
       if (workflowId) {
         events = events.filter((e) => e.workflowId === workflowId);
+      }
+      if (taskId) {
+        events = events.filter((e) => e.taskId === taskId);
       }
       if (agentId) {
         events = events.filter((e) => e.agentId === agentId);
@@ -40,7 +44,11 @@ export const registerActivityLogTool = (server: McpServer) =>
       }
       if (contains) {
         const containsFilter = contains.toLowerCase();
-        events = events.filter((e) => e.detail.toLowerCase().includes(containsFilter));
+        events = events.filter(
+          (e) =>
+            e.detail.toLowerCase().includes(containsFilter) ||
+            (e.title ? e.title.toLowerCase().includes(containsFilter) : false),
+        );
       }
 
       const sliced = events.slice(Math.max(0, events.length - limit));
@@ -48,7 +56,7 @@ export const registerActivityLogTool = (server: McpServer) =>
         format === "lines"
           ? sliced.map(
               (e) =>
-                `[${e.timestamp}] run=${e.runId ?? "-"} ${e.type} ${e.action} ${e.agentId ? `agent=${e.agentId} ` : ""}${e.workflowId ? `task=${e.workflowId} ` : ""}${e.detail}`,
+                `[${e.timestamp}] run=${e.runId ?? "-"} ${e.type} ${e.kind ?? e.action}${e.agentId ? ` agent=${e.agentId}` : ""}${e.taskId ? ` task=${e.taskId}` : ""}${e.title ? ` title=${e.title}` : ""} ${e.detail}`,
             )
           : undefined;
 

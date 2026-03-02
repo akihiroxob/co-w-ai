@@ -12,10 +12,12 @@ export const registerRejectTaskTool = (server: McpServer) =>
       description: "Review rejection step: move task from in_review/wait_accept/accepted to rejected.",
       inputSchema: {
         taskId: z.string().min(1),
+        kind: z.enum(["quality", "spec"]).default("quality"),
         reason: z.string().min(1),
+        next: z.array(z.string().min(1)).min(1).max(5).default(["Address the review feedback and resubmit."]),
       },
     },
-    async ({ taskId, reason }) => {
+    async ({ taskId, kind, reason, next }) => {
       const task = findTask(taskId);
       if (!task) {
         return {
@@ -38,18 +40,27 @@ export const registerRejectTaskTool = (server: McpServer) =>
       task.reworkReason = reason.trim();
       task.reworkCount = (task.reworkCount ?? 0) + 1;
       task.updatedAt = getIsoTime();
+      task.reject = {
+        kind,
+        reason: reason.trim(),
+        next: next.map((item) => item.trim()).filter(Boolean),
+        rejectedAt: task.updatedAt,
+      };
 
       addActivityEvent({
         id: issueTaskId("evt"),
         timestamp: task.updatedAt,
         type: "workflow",
         action: "planning_reject_task",
-        detail: `${taskId} rejected: ${reason.trim()}`,
+        taskId,
+        kind: "error",
+        title: `Rejected: ${kind}`,
+        detail: `${taskId} rejected: ${reason.trim()} | next: ${task.reject.next.join("; ")}`,
       });
 
       return {
         content: [{ type: "text", text: `Rejected: ${taskId}` }],
-        structuredContent: { ok: true, task, reason: reason.trim() },
+        structuredContent: { ok: true, task, kind, reason: reason.trim(), next: task.reject.next },
       };
     },
   );
